@@ -1,0 +1,122 @@
+Build a professional crypto trading journal and trading system web app.
+
+STYLE:
+
+* Minimalist black and white UI only
+* No gradients
+* No glassmorphism
+* No neon colors
+* No “AI startup” vibe
+* Clean institutional/professional dashboard feel
+* Sharp spacing and typography
+* Focus on clarity and usability
+
+* Dark mode default
+* Use clean tables/cards/charts
+* Modern but simple UI similar to trading terminals
+
+TECH STACK:
+
+* Next.js
+* TailwindCSS
+* shadcn/ui
+* Optimized for Vercel deployment
+* Prepare structure for Supabase integration
+
+MAIN FEATURES:
+
+1. Dashboard
+
+* Total capital
+* Current PnL
+* Win rate
+* Average RR
+* Trade count
+* Current open trades
+* Equity curve chart
+* Recent trades section
+
+2. Trade Entry Form
+   The form should support:
+
+* Coin/pair
+* Setup type
+* Timeframe
+* Entry price
+* Stop loss
+* Take profits
+* Position sizing
+* Risk %
+* Trade notes
+* Screenshot upload placeholder
+* Watchlist or trade mode
+* Confidence result section
+* Trade approval result section
+
+3. Trading System Engine UI
+   Create sections for:
+
+* Market Factors
+* Structure Factors
+* Momentum Factors
+* Entry Factors
+* Risk Factors
+
+Each factor should support:
+
+* dropdown selections
+* weighted scoring
+* automatic calculations
+* dynamic scoring display
+
+4. Trade Decision Output
+   The system should visually output:
+
+* Trade Approved / Rejected
+* Aggressive / Balanced / Asymmetric trade type
+* Suggested allocation %
+* Suggested RR target
+* Suggested stop loss range
+* Setup quality score
+
+5. Trade History
+
+* Full journal table
+* Sort/filter/search
+* Profit/loss tracking
+* Mistake tracking
+* Notes
+* Screenshot preview placeholders
+* Outcome tags
+
+6. Watchlist Section
+
+* Save rejected setups
+* Save watchlist trades
+* Track hypothetical outcomes later
+
+7. Analytics
+
+* Strategy performance
+* Win rate by setup
+* Profit by coin
+* Profit by timeframe
+* Mistake frequency
+* Equity curve
+* Psychological analysis section
+
+8. Settings
+
+* Total account size
+* Risk profile
+* Default trade settings
+* System weight controls placeholder
+
+IMPORTANT:
+
+* Keep layout modular and scalable
+* Build reusable components
+* Keep codebase clean and production ready
+* Avoid overdesigned visuals
+* Prioritize functionality and readability
+* Design it like a real trading workstation, not a flashy landing page
