@@ -16,7 +16,7 @@ export default function Settings() {
   };
 
   return (
-    <div className="p-6 max-w-sm space-y-5">
+    <div className="p-6 space-y-5">
       <h1 className="text-sm font-semibold">Settings</h1>
 
       <div className="border border-border rounded-sm p-5 space-y-4">

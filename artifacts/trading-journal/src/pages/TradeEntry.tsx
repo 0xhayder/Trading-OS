@@ -162,7 +162,7 @@ export default function TradeEntry() {
       : "bg-green-400/5";
 
     return (
-      <div className="p-6 max-w-xl space-y-5">
+      <div className="p-6 space-y-5">
         <button
           className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
           onClick={handleDiscard}
@@ -260,7 +260,7 @@ export default function TradeEntry() {
   }
 
   return (
-    <div className="p-6 max-w-2xl space-y-5">
+    <div className="p-6 space-y-5">
       <div>
         <h1 className="text-sm font-semibold">New Trade</h1>
         <p className="text-xs text-muted-foreground mt-0.5">Fill all fields, then submit to score</p>
