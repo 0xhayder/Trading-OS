@@ -1,4 +1,4 @@
-import { pgTable, serial, text, timestamp, real } from "drizzle-orm/pg-core";
+import { boolean, jsonb, pgTable, real, serial, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -43,6 +43,15 @@ export const tradesTable = pgTable("trades", {
   expectedProfitPct: real("expected_profit_pct").notNull(),
   expectedLossPct: real("expected_loss_pct").notNull(),
   finalDecision: text("final_decision").notNull(),
+  userId: uuid("user_id"),
+  tradeClassification: text("trade_classification"),
+  engineVersion: text("engine_version"),
+  scoreBreakdown: jsonb("score_breakdown").$type<Record<string, unknown>>(),
+  psychologyNotes: text("psychology_notes"),
+  marketContext: jsonb("market_context").$type<Record<string, unknown>>(),
+  wasRejectedByEngine: boolean("was_rejected_by_engine").default(false),
+  isHypothetical: boolean("is_hypothetical").default(false),
+  hypotheticalPnlPct: real("hypothetical_pnl_pct"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

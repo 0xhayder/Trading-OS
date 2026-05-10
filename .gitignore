@@ -7,6 +7,11 @@ out-tsc
 *.tsbuildinfo
 .expo
 .expo-shared
+.next
+.turbo
+.parcel-cache
+.eslintcache
+*.log
 
 # dependencies
 node_modules
@@ -44,6 +49,6 @@ Thumbs.db
 .cursor/rules/nx-rules.mdc
 .github/instructions/nx.instructions.md
 
-# Replit
+# Ephemeral caches (e.g. some cloud IDEs / local tooling)
 .cache/
 .local/

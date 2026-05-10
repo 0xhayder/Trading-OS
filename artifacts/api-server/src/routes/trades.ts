@@ -14,7 +14,7 @@ import {
   UpdateTradeResponse,
   ScoreTradeResponse,
 } from "@workspace/api-zod";
-import { scoreTradeInput } from "../lib/scorer";
+import { evaluateTradeInput, scoreTradeInput } from "../lib/scorer";
 
 const router: IRouter = Router();
 
@@ -24,7 +24,11 @@ router.post("/trades/score", async (req, res): Promise<void> => {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
-  const score = scoreTradeInput(parsed.data);
+  const settings = await db.query.settingsTable.findFirst();
+  const score = scoreTradeInput(parsed.data, {
+    baseAccountEquity: settings?.totalCapital ?? 10_000,
+    maxSinglePositionPct: settings?.maxAllocationPct ?? 25,
+  });
   res.json(ScoreTradeResponse.parse(score));
 });
 
@@ -60,7 +64,11 @@ router.post("/trades", async (req, res): Promise<void> => {
     return;
   }
 
-  const score = scoreTradeInput(parsed.data);
+  const settings = await db.query.settingsTable.findFirst();
+  const { tradeScore: score, persistence } = evaluateTradeInput(parsed.data, {
+    baseAccountEquity: settings?.totalCapital ?? 10_000,
+    maxSinglePositionPct: settings?.maxAllocationPct ?? 25,
+  });
 
   const [trade] = await db
     .insert(tradesTable)
@@ -68,6 +76,10 @@ router.post("/trades", async (req, res): Promise<void> => {
       ...parsed.data,
       mode: parsed.data.mode ?? "trade",
       ...score,
+      tradeClassification: persistence.tradeClassification,
+      engineVersion: persistence.engineVersion,
+      scoreBreakdown: persistence.scoreBreakdown as Record<string, unknown>,
+      wasRejectedByEngine: persistence.wasRejectedByEngine,
     })
     .returning();
 
