@@ -121,9 +121,15 @@ router.patch("/trades/:id", async (req, res): Promise<void> => {
     return;
   }
 
+  const { status, ...nullablePatch } = parsed.data;
+  const updatePatch = {
+    ...nullablePatch,
+    ...(status == null ? {} : { status }),
+  };
+
   const [trade] = await db
     .update(tradesTable)
-    .set(parsed.data)
+    .set(updatePatch)
     .where(eq(tradesTable.id, params.data.id))
     .returning();
 

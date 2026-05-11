@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
-import { useTrades, useWatchlist } from "@/lib/store";
+import { useSettings, useTrades, useWatchlist } from "@/lib/store";
 import { scoreTradeInput } from "@/lib/scorer";
 import type { TradeInput, ScoreResult, SetupType, Timeframe, MarketCondition, NarrativeStrength, LevelClarity, TfAlignment, RetestQuality, VolumeStrength, CandleImpulse, FollowThrough, EntryDistance, SpaceToResistance, RRQuality, Overextension, EventRisk, LiquidityRisk } from "@/lib/types";
 import { ArrowLeft, AlertTriangle } from "lucide-react";
@@ -12,18 +12,18 @@ const DEFAULTS: TradeInput = {
   btcCondition: "Neutral",
   altCondition: "Neutral",
   narrativeStrength: "Active",
-  levelClarity: "Decent",
+  levelClarity: "Clean",
   timeframeAlignment: "Partially Aligned",
-  retestQuality: "Acceptable",
+  retestQuality: "Decent",
   volumeStrength: "Normal",
-  candleImpulse: "Medium",
+  candleImpulse: "Strong",
   followThrough: "Slowing",
   stopLossPct: 3,
   tp1Pct: 6,
   tp2Pct: 12,
-  entryDistance: "Acceptable",
+  entryDistance: "Decent",
   spaceToResistance: "Decent Space",
-  rrQuality: "Acceptable",
+  rrQuality: "RR 2 to 3",
   overextension: "Calm",
   eventRisk: "Low",
   liquidityRisk: "Acceptable",
@@ -94,20 +94,21 @@ export default function TradeEntry() {
   const [, setLocation] = useLocation();
   const { addTrade } = useTrades();
   const { addToWatchlist } = useWatchlist();
+  const { settings } = useSettings();
 
   const set = <K extends keyof TradeInput>(key: K, val: TradeInput[K]) =>
     setForm((p) => ({ ...p, [key]: val }));
 
   const handleScore = () => {
     if (!form.coin.trim()) return;
-    const scored = scoreTradeInput(form);
+    const scored = scoreTradeInput(form, settings);
     setResult(scored);
     setView("result");
   };
 
-  const handleLogTrade = () => {
+  const handleLogTrade = async () => {
     if (!result) return;
-    addTrade({
+    await addTrade({
       ...form,
       ...result,
       id: `t-${Date.now()}`,
@@ -119,9 +120,9 @@ export default function TradeEntry() {
     setLocation("/journal");
   };
 
-  const handleAddToWatchlist = () => {
+  const handleAddToWatchlist = async () => {
     if (!result) return;
-    addToWatchlist({
+    await addToWatchlist({
       ...form,
       ...result,
       id: `w-${Date.now()}`,
@@ -139,9 +140,9 @@ export default function TradeEntry() {
   };
 
   if (view === "result" && result) {
-    const isApproved = result.finalScore >= 55;
-    const isWatchlist = result.finalScore >= 40 && result.finalScore < 55;
-    const isRejected = result.finalScore < 40;
+    const isApproved = result.finalScore >= 60;
+    const isWatchlist = result.finalScore >= 45 && result.finalScore < 60;
+    const isRejected = result.finalScore < 45;
 
     const scoreColor = isRejected
       ? "text-red-400"
@@ -282,7 +283,7 @@ export default function TradeEntry() {
             label="Setup Type"
             value={form.setupType}
             onChange={(v) => set("setupType", v as SetupType)}
-            options={["Breakout Retest", "Double Bottom", "Trendline Trade"]}
+            options={["Breakout Retest", "Double Bottom", "Trendline Reclaim", "Trend Continuation"]}
           />
           <Select
             label="Timeframe"
@@ -294,22 +295,22 @@ export default function TradeEntry() {
 
         <SectionDivider label="2 — Market" />
         <div className="grid grid-cols-3 gap-4">
-          <Select label="BTC Condition" value={form.btcCondition} onChange={(v) => set("btcCondition", v as MarketCondition)} options={["Bullish", "Neutral", "Bearish"]} />
-          <Select label="Alt Condition" value={form.altCondition} onChange={(v) => set("altCondition", v as MarketCondition)} options={["Bullish", "Neutral", "Bearish"]} />
-          <Select label="Narrative" value={form.narrativeStrength} onChange={(v) => set("narrativeStrength", v as NarrativeStrength)} options={["Hot", "Active", "Dead"]} />
+          <Select label="BTC Condition" value={form.btcCondition} onChange={(v) => set("btcCondition", v as MarketCondition)} options={["Strong Bullish", "Bullish", "Neutral", "Bearish", "Strong Bearish"]} />
+          <Select label="Alt Condition" value={form.altCondition} onChange={(v) => set("altCondition", v as MarketCondition)} options={["Strong Bullish", "Bullish", "Neutral", "Bearish", "Strong Bearish"]} />
+          <Select label="Narrative" value={form.narrativeStrength} onChange={(v) => set("narrativeStrength", v as NarrativeStrength)} options={["Hot", "Active", "Neutral", "Weak", "Dead"]} />
         </div>
 
         <SectionDivider label="3 — Structure" />
         <div className="grid grid-cols-3 gap-4">
-          <Select label="Level Clarity" value={form.levelClarity} onChange={(v) => set("levelClarity", v as LevelClarity)} options={["Obvious", "Decent", "Forced / Messy"]} />
+          <Select label="Level Clarity" value={form.levelClarity} onChange={(v) => set("levelClarity", v as LevelClarity)} options={["Extremely Obvious", "Clean", "Medium", "Forced / Messy"]} />
           <Select label="TF Alignment" value={form.timeframeAlignment} onChange={(v) => set("timeframeAlignment", v as TfAlignment)} options={["Fully Aligned", "Partially Aligned", "Counter Trend"]} />
-          <Select label="Retest Quality" value={form.retestQuality} onChange={(v) => set("retestQuality", v as RetestQuality)} options={["Strong", "Acceptable", "Weak"]} />
+          <Select label="Retest Quality" value={form.retestQuality} onChange={(v) => set("retestQuality", v as RetestQuality)} options={["Strong", "Decent", "Weak", "None"]} />
         </div>
 
         <SectionDivider label="4 — Momentum" />
         <div className="grid grid-cols-3 gap-4">
           <Select label="Volume" value={form.volumeStrength} onChange={(v) => set("volumeStrength", v as VolumeStrength)} options={["Strong Expansion", "Normal", "Weak"]} />
-          <Select label="Candle Impulse" value={form.candleImpulse} onChange={(v) => set("candleImpulse", v as CandleImpulse)} options={["Strong", "Medium", "Weak"]} />
+          <Select label="Candle Impulse" value={form.candleImpulse} onChange={(v) => set("candleImpulse", v as CandleImpulse)} options={["Explosive", "Strong", "Weak"]} />
           <Select label="Follow Through" value={form.followThrough} onChange={(v) => set("followThrough", v as FollowThrough)} options={["Continuation Present", "Slowing", "Failing"]} />
         </div>
 
@@ -320,9 +321,9 @@ export default function TradeEntry() {
           <NumberInput label="TP2 %" value={form.tp2Pct} onChange={(v) => set("tp2Pct", v)} placeholder="14" />
         </div>
         <div className="grid grid-cols-3 gap-4">
-          <Select label="Entry Distance" value={form.entryDistance} onChange={(v) => set("entryDistance", v as EntryDistance)} options={["Optimal", "Acceptable", "Extended"]} />
+          <Select label="Entry Distance" value={form.entryDistance} onChange={(v) => set("entryDistance", v as EntryDistance)} options={["Perfect", "Decent", "Chased"]} />
           <Select label="Space to Resistance" value={form.spaceToResistance} onChange={(v) => set("spaceToResistance", v as SpaceToResistance)} options={["Large Space", "Decent Space", "Limited Space"]} />
-          <Select label="RR Quality" value={form.rrQuality} onChange={(v) => set("rrQuality", v as RRQuality)} options={["Asymmetric", "Acceptable", "Poor"]} />
+          <Select label="RR Quality" value={form.rrQuality} onChange={(v) => set("rrQuality", v as RRQuality)} options={["RR > 5", "RR 3 to 5", "RR 2 to 3", "RR < 2"]} />
         </div>
 
         <SectionDivider label="6 — Risk" />

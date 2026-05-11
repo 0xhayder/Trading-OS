@@ -1,7 +1,25 @@
+import path from "node:path";
 import type { NextConfig } from "next";
 
+const journalSrc = path.resolve(__dirname, "../trading-journal/src");
+const workspaceRoot = path.resolve(__dirname, "../..");
+
 const nextConfig: NextConfig = {
-  transpilePackages: ["@workspace/trading-engine"],
+  outputFileTracingRoot: workspaceRoot,
+  transpilePackages: ["@workspace/trading-engine", "@workspace/api-client-react"],
+  turbopack: {
+    resolveAlias: {
+      "@": journalSrc,
+    },
+  },
+  webpack: (config) => {
+    config.resolve = config.resolve ?? {};
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      "@": journalSrc,
+    };
+    return config;
+  },
 };
 
 export default nextConfig;

@@ -1,0 +1,4 @@
+/* Scan the Vite journal app so Tailwind generates utilities for those components */
+@source "../../trading-journal/src/**/*.{js,ts,jsx,tsx}";
+
+@import "../../trading-journal/src/index.css";

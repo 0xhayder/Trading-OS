@@ -1,10 +1,19 @@
 import { createBrowserClient } from "@supabase/ssr";
 
-export function createSupabaseBrowserClient() {
+function requirePublicSupabaseEnv() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!url || !anon) {
-    throw new Error("NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY must be set.");
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (!url || !anonKey) {
+    throw new Error(
+      "Missing Supabase public env vars. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in .env.local.",
+    );
   }
-  return createBrowserClient(url, anon);
+
+  return { url, anonKey };
+}
+
+export function createSupabaseBrowserClient() {
+  const { url, anonKey } = requirePublicSupabaseEnv();
+  return createBrowserClient(url, anonKey);
 }

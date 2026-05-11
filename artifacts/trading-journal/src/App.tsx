@@ -7,9 +7,22 @@ import Watchlist from "@/pages/Watchlist";
 import Analytics from "@/pages/Analytics";
 import Settings from "@/pages/Settings";
 
+function wouterBasePath(): string {
+  try {
+    const base = (import.meta as unknown as { env?: { BASE_URL?: string } }).env?.BASE_URL;
+    if (typeof base === "string") return base.replace(/\/$/, "");
+  } catch {
+    /* non-Vite bundlers */
+  }
+  if (typeof process !== "undefined" && process.env?.NEXT_PUBLIC_BASE_PATH != null) {
+    return String(process.env.NEXT_PUBLIC_BASE_PATH).replace(/\/$/, "");
+  }
+  return "";
+}
+
 function App() {
   return (
-    <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+    <WouterRouter base={wouterBasePath()}>
       <Layout>
         <Switch>
           <Route path="/" component={Dashboard} />

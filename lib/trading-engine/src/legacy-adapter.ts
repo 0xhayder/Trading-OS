@@ -156,8 +156,8 @@ function inferVolumeMcapFromLegacy(s: string): number {
 
 function mapCandle(s: string): EngineTradeInput["momentum"]["candleStrength"] {
   const x = s.toLowerCase();
+  if (x.includes("explosive")) return "explosive";
   if (x.includes("strong")) return "strong";
-  if (x.includes("medium")) return "explosive";
   if (x.includes("weak")) return "weak";
   return "strong";
 }
@@ -195,8 +195,9 @@ function computeRrFromPct(
     if (Number.isFinite(rr) && rr > 0) return Math.max(rr, 0.25);
   }
   const q = rrQuality.toLowerCase();
-  if (q.includes("asymmetric")) return 3.5;
-  if (q.includes("acceptable")) return 2.4;
+  if (q.includes("> 5") || q.includes("asymmetric")) return 5.5;
+  if (q.includes("3 to 5")) return 4;
+  if (q.includes("2 to 3") || q.includes("acceptable")) return 2.5;
   return 1.5;
 }
 

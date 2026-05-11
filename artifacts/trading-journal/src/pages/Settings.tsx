@@ -1,6 +1,29 @@
 import { useState } from "react";
 import { useSettings } from "@/lib/store";
 
+const CLASSIFICATIONS = [
+  { range: "0-44", label: "Reject Trade", note: "No capital deployment" },
+  { range: "45-59", label: "Watchlist Only", note: "Monitor until structure or momentum improves" },
+  { range: "60-74", label: "Balanced Trade", note: "Base allocation band: 30-40%" },
+  { range: "75-84", label: "Aggressive Trade", note: "Base allocation band: 40-55%" },
+  { range: "85-100", label: "Asymmetric Swing Trade", note: "Base allocation band: 55-70%" },
+];
+
+const LAYERS = [
+  { label: "Market", weight: "25%", note: "BTC trend 40%, alt trend 35%, narrative 25%" },
+  { label: "Structure", weight: "30%", note: "Setup, support/resistance, retest, HTF alignment, liquidity space" },
+  { label: "Momentum", weight: "20%", note: "Volume/market cap, relative volume, candle strength, expansion velocity" },
+  { label: "Entry", weight: "15%", note: "RR quality, entry efficiency, distance to resistance, stop-loss efficiency" },
+  { label: "Risk", weight: "10%", note: "Volatility, position concentration, correlation exposure reduce sizing" },
+];
+
+const GUARDRAILS = [
+  "Final score is a weighted 5-layer blend normalized to 0-100.",
+  "Higher allocation accepts lower RR: 50% allocation implies minimum RR 2.",
+  "Smaller allocation needs stronger asymmetry: 15% allocation implies minimum RR 5.",
+  "Sizing is adjusted down for high volatility, weak structure, market headwinds, and RR below the size-implied floor.",
+];
+
 export default function Settings() {
   const { settings, updateSettings } = useSettings();
   const [capital, setCapital] = useState(String(settings.totalCapital));
@@ -21,7 +44,7 @@ export default function Settings() {
 
       <div className="border border-border rounded-sm p-5 space-y-4">
         <div>
-          <div className="section-label mb-1.5">Total Capital (USD)</div>
+          <div className="section-label mb-1.5">Base Account Capital (USD)</div>
           <input
             type="number"
             min="1"
@@ -31,7 +54,7 @@ export default function Settings() {
             onChange={(e) => setCapital(e.target.value)}
           />
           <div className="text-xs text-muted-foreground mt-1.5">
-            Used to calculate position sizes in the scoring output.
+            Used by the engine when converting approved allocation bands into position sizing.
           </div>
         </div>
 
@@ -44,19 +67,37 @@ export default function Settings() {
       </div>
 
       <div className="border border-border rounded-sm p-5">
-        <div className="section-label mb-3">Score Reference</div>
+        <div className="section-label mb-3">Classification Reference</div>
         <div className="space-y-2">
-          {[
-            { range: "0 – 39", label: "Reject", note: "Do not trade" },
-            { range: "40 – 54", label: "Watchlist", note: "Monitor, no entry" },
-            { range: "55 – 67", label: "Standard Trade", note: "1% allocation" },
-            { range: "68 – 81", label: "High Conviction", note: "2.5% allocation" },
-            { range: "82 – 100", label: "Expansion Trade", note: "5% allocation" },
-          ].map(({ range, label, note }) => (
-            <div key={range} className="flex items-center gap-3 text-xs font-mono">
-              <span className="text-muted-foreground w-14 shrink-0">{range}</span>
-              <span className="text-foreground/80 w-32 shrink-0">{label}</span>
+          {CLASSIFICATIONS.map(({ range, label, note }) => (
+            <div key={range} className="grid grid-cols-[64px_180px_1fr] gap-3 text-xs font-mono">
+              <span className="text-muted-foreground">{range}</span>
+              <span className="text-foreground/80">{label}</span>
               <span className="text-muted-foreground">{note}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="border border-border rounded-sm p-5">
+        <div className="section-label mb-3">Scoring Layers</div>
+        <div className="space-y-2">
+          {LAYERS.map(({ label, weight, note }) => (
+            <div key={label} className="grid grid-cols-[100px_48px_1fr] gap-3 text-xs font-mono">
+              <span className="text-foreground/80">{label}</span>
+              <span className="text-muted-foreground">{weight}</span>
+              <span className="text-muted-foreground">{note}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="border border-border rounded-sm p-5">
+        <div className="section-label mb-3">Sizing Guardrails</div>
+        <div className="space-y-2">
+          {GUARDRAILS.map((note) => (
+            <div key={note} className="text-xs font-mono text-muted-foreground">
+              {note}
             </div>
           ))}
         </div>

@@ -50,11 +50,11 @@ export default function Dashboard() {
     .slice(0, 6);
 
   const statusColor: Record<string, string> = {
-    "Expansion Trade": "text-green-400",
-    "High Conviction": "text-green-400",
-    "Standard Trade": "text-foreground/70",
-    "Watchlist": "text-yellow-500",
-    "Reject": "text-red-400",
+    "Asymmetric Swing Trade": "text-green-400",
+    "Aggressive Trade": "text-green-400",
+    "Balanced Trade": "text-foreground/70",
+    "Watchlist Only": "text-yellow-500",
+    "Reject Trade": "text-red-400",
   };
 
   return (
