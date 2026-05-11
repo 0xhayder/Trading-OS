@@ -56,7 +56,7 @@ export function scoreEngineTrade(
     classification === "asymmetric_swing_trade";
 
   const rrOk = input.entry.rrNumeric >= allocation.impliedMinRr * 0.85;
-  const approved = deployable && rrOk;
+  const approved = deployable;
 
   const reason = !deployable
     ? classification === "reject"
@@ -64,7 +64,7 @@ export function scoreEngineTrade(
       : "Watchlist / observation — no capital commitment until score improves."
     : rrOk
       ? "Meets minimum asymmetry and regime checks for scaled deployment."
-      : "RR floor breached for intended sizing tier — reduce size or skip.";
+      : "Deployable setup with RR below ideal floor — trade is approved, but reduce size or wait for better location.";
 
   const factorRows = layers.flatMap((l) => l.factors);
 

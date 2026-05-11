@@ -64,12 +64,13 @@ export function useTrades() {
     setTrades((previous) => [remoteTrade, ...previous.filter((item) => item.id !== trade.id)]);
   };
 
-  const updateTrade = (id: string, patch: Partial<Trade>) => {
+  const updateTrade = (id: string, patch: Partial<Trade>): Promise<Trade | null> => {
     setTrades((previous) => previous.map((trade) => (trade.id === id ? { ...trade, ...patch } : trade)));
 
-    void updateTradeInSupabase(id, patch).then((remoteTrade) => {
-      if (!remoteTrade || !mounted.current) return;
+    return updateTradeInSupabase(id, patch).then((remoteTrade) => {
+      if (!remoteTrade || !mounted.current) return null;
       setTrades((previous) => replaceById(previous, remoteTrade));
+      return remoteTrade;
     });
   };
 
@@ -162,5 +163,12 @@ export function useSettings() {
     });
   };
 
-  return { settings, updateSettings };
+  const refreshSettings = (): Promise<void> =>
+    fetchSettingsFromSupabase().then((remoteSettings) => {
+      if (!mounted.current || remoteSettings == null) return;
+      setSettings(remoteSettings);
+      persist("tj_settings", remoteSettings);
+    });
+
+  return { settings, updateSettings, refreshSettings };
 }

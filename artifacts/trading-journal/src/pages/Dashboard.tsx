@@ -1,6 +1,15 @@
 import { Link } from "wouter";
 import { useTrades } from "@/lib/store";
 import { useSettings } from "@/lib/store";
+import {
+  buildEquityCurveUsd,
+  initialCapitalUsd,
+  isBreakevenClosed,
+  isLosingClosed,
+  isWinningClosed,
+  totalRealizedUsd,
+  totalReturnPct,
+} from "@/lib/portfolioMetrics";
 import { AreaChart, Area, XAxis, YAxis, ResponsiveContainer, Tooltip } from "recharts";
 
 const TT = {
@@ -30,20 +39,19 @@ export default function Dashboard() {
 
   const closed = trades.filter((t) => t.outcome && t.actualPnlPct != null);
   const open = trades.filter((t) => !t.outcome);
-  const wins = closed.filter((t) => (t.actualPnlPct ?? 0) > 0);
-  const totalPnl = closed.reduce((s, t) => s + (t.actualPnlPct ?? 0), 0);
-  const winRate = closed.length > 0 ? (wins.length / closed.length) * 100 : 0;
+  const wins = closed.filter(isWinningClosed);
+  const losses = closed.filter(isLosingClosed);
+  const breakevens = closed.filter(isBreakevenClosed);
+  const totalPnlUsd = totalRealizedUsd(closed);
+  const initialUsd = initialCapitalUsd(settings.totalCapital, totalPnlUsd);
+  const totalPnl = totalReturnPct(initialUsd, totalPnlUsd);
+  const decided = wins.length + losses.length;
+  const winRate = decided > 0 ? (wins.length / decided) * 100 : 0;
 
-  let eq = 100;
-  const equityCurve = [...closed]
-    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
-    .map((t) => {
-      eq += t.actualPnlPct ?? 0;
-      return {
-        date: new Date(t.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
-        equity: Math.round(eq * 100) / 100,
-      };
-    });
+  const closedChrono = [...closed].sort(
+    (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+  );
+  const equityCurve = buildEquityCurveUsd(closedChrono, initialUsd);
 
   const recent = [...trades]
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
@@ -66,26 +74,34 @@ export default function Dashboard() {
         </span>
       </div>
 
-      <div className="grid grid-cols-4 gap-3">
+      <div className="grid grid-cols-5 gap-3">
         <Stat
-          label="Total PnL"
+          label="Account return"
           value={`${totalPnl >= 0 ? "+" : ""}${totalPnl.toFixed(2)}%`}
           color={totalPnl > 0 ? "text-green-400" : totalPnl < 0 ? "text-red-400" : undefined}
+        />
+        <Stat
+          label="Total PnL (USD)"
+          value={`${totalPnlUsd >= 0 ? "+" : ""}$${totalPnlUsd.toFixed(2)}`}
+          color={totalPnlUsd > 0 ? "text-green-400" : totalPnlUsd < 0 ? "text-red-400" : undefined}
         />
         <Stat
           label="Win Rate"
           value={`${winRate.toFixed(1)}%`}
           color={winRate >= 50 ? "text-green-400" : closed.length > 0 ? "text-red-400" : undefined}
         />
-        <Stat label="Closed" value={`${wins.length}W / ${closed.length - wins.length}L`} />
+        <Stat
+          label="Closed"
+          value={`${wins.length}W / ${losses.length}L${breakevens.length ? ` / ${breakevens.length}BE` : ""}`}
+        />
         <Stat label="Open" value={String(open.length)} />
       </div>
 
       <div className="border border-border rounded-sm p-4">
-        <div className="section-label mb-4">Equity Curve</div>
-        {equityCurve.length > 1 ? (
+        <div className="section-label mb-4">Equity curve (USD)</div>
+        {closed.length > 0 ? (
           <ResponsiveContainer width="100%" height={160}>
-            <AreaChart data={equityCurve} margin={{ top: 4, right: 0, left: -28, bottom: 0 }}>
+            <AreaChart data={equityCurve} margin={{ top: 4, right: 8, left: 4, bottom: 0 }}>
               <defs>
                 <linearGradient id="eg" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor="hsl(0 0% 70%)" stopOpacity={0.1} />
@@ -93,9 +109,17 @@ export default function Dashboard() {
                 </linearGradient>
               </defs>
               <XAxis dataKey="date" tick={{ fontSize: 10, fill: "hsl(0 0% 35%)", fontFamily: "var(--app-font-mono)" }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fontSize: 10, fill: "hsl(0 0% 35%)", fontFamily: "var(--app-font-mono)" }} axisLine={false} tickLine={false} />
-              <Tooltip {...TT} />
-              <Area type="monotone" dataKey="equity" stroke="hsl(0 0% 70%)" strokeWidth={1.5} fill="url(#eg)" dot={false} />
+              <YAxis
+                tick={{ fontSize: 10, fill: "hsl(0 0% 35%)", fontFamily: "var(--app-font-mono)" }}
+                axisLine={false}
+                tickLine={false}
+                tickFormatter={(v) => `$${Number(v).toLocaleString()}`}
+              />
+              <Tooltip
+                {...TT}
+                formatter={(v: number) => [`$${Number(v).toFixed(2)}`, "Equity"]}
+              />
+              <Area type="monotone" dataKey="equityUsd" stroke="hsl(0 0% 70%)" strokeWidth={1.5} fill="url(#eg)" dot={false} />
             </AreaChart>
           </ResponsiveContainer>
         ) : (
@@ -130,6 +154,8 @@ export default function Dashboard() {
                       ? "bg-green-400"
                       : t.outcome === "loss"
                       ? "bg-red-400"
+                      : t.outcome === "breakeven"
+                      ? "bg-muted-foreground"
                       : "bg-yellow-500"
                   }`}
                 />
@@ -148,8 +174,16 @@ export default function Dashboard() {
                   <div className="text-[10px] font-mono text-muted-foreground">{t.finalScore}/100</div>
                 </div>
                 {t.actualPnlPct != null && (
-                  <div className={`font-mono text-sm w-14 text-right shrink-0 ${t.actualPnlPct >= 0 ? "text-green-400" : "text-red-400"}`}>
-                    {t.actualPnlPct >= 0 ? "+" : ""}{t.actualPnlPct.toFixed(2)}%
+                  <div
+                    className={`font-mono text-sm w-14 text-right shrink-0 ${
+                      t.outcome === "breakeven" || t.actualPnlPct === 0
+                        ? "text-muted-foreground"
+                        : t.actualPnlPct > 0
+                        ? "text-green-400"
+                        : "text-red-400"
+                    }`}
+                  >
+                    {t.actualPnlPct > 0 ? "+" : ""}{t.actualPnlPct.toFixed(2)}%
                   </div>
                 )}
                 {!t.outcome && (

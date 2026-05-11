@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useTrades } from "@/lib/store";
+import { Fragment, useState } from "react";
+import { useSettings, useTrades } from "@/lib/store";
 import { Trash2, ChevronUp, ChevronDown } from "lucide-react";
 import type { Trade, TradeOutcome } from "@/lib/types";
 
@@ -7,6 +7,7 @@ type SortKey = "createdAt" | "finalScore" | "actualPnlPct";
 
 export default function Journal() {
   const { trades, deleteTrade, updateTrade } = useTrades();
+  const { refreshSettings } = useSettings();
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
   const [sortKey, setSortKey] = useState<SortKey>("createdAt");
@@ -14,6 +15,7 @@ export default function Journal() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [editOutcome, setEditOutcome] = useState<TradeOutcome | "">("");
   const [editPnl, setEditPnl] = useState("");
+  const [editAllocatedAmount, setEditAllocatedAmount] = useState("");
   const [editMistakes, setEditMistakes] = useState("");
 
   const filtered = trades
@@ -23,6 +25,7 @@ export default function Journal() {
       if (filter === "open" && t.outcome) return false;
       if (filter === "win" && t.outcome !== "win") return false;
       if (filter === "loss" && t.outcome !== "loss") return false;
+      if (filter === "breakeven" && t.outcome !== "breakeven") return false;
       return true;
     })
     .sort((a, b) => {
@@ -40,16 +43,24 @@ export default function Journal() {
     setExpandedId(t.id);
     setEditOutcome(t.outcome ?? "");
     setEditPnl(t.actualPnlPct != null ? String(t.actualPnlPct) : "");
+    setEditAllocatedAmount(t.allocatedAmountUsd != null ? String(t.allocatedAmountUsd) : "");
     setEditMistakes(t.mistakeTags ?? "");
   };
 
   const saveExpand = () => {
     if (!expandedId) return;
     const pnl = parseFloat(editPnl);
-    updateTrade(expandedId, {
+    const allocatedAmount = parseFloat(editAllocatedAmount);
+
+    // Capital is adjusted only on the API (trade PATCH); refreshing settings avoids double-counting
+    // when the client would also PATCH settings with stale local totals.
+    void updateTrade(expandedId, {
       outcome: editOutcome || undefined,
       actualPnlPct: isNaN(pnl) ? undefined : pnl,
+      allocatedAmountUsd: isNaN(allocatedAmount) ? undefined : allocatedAmount,
       mistakeTags: editMistakes || undefined,
+    }).then((remote) => {
+      if (remote) void refreshSettings();
     });
     setExpandedId(null);
   };
@@ -89,6 +100,7 @@ export default function Journal() {
           <option value="open">Open</option>
           <option value="win">Win</option>
           <option value="loss">Loss</option>
+          <option value="breakeven">Breakeven</option>
         </select>
       </div>
 
@@ -115,9 +127,8 @@ export default function Journal() {
               </tr>
             )}
             {filtered.map((t) => (
-              <>
+              <Fragment key={t.id}>
                 <tr
-                  key={t.id}
                   className="hover:bg-accent/20 cursor-pointer"
                   onClick={() => expandedId === t.id ? setExpandedId(null) : openExpand(t)}
                 >
@@ -131,8 +142,16 @@ export default function Journal() {
                   <td className="px-3 py-2.5 text-xs text-muted-foreground">{t.tradeStatus}</td>
                   <td className="px-3 py-2.5 font-mono text-sm">
                     {t.actualPnlPct != null ? (
-                      <span className={t.actualPnlPct >= 0 ? "text-green-400" : "text-red-400"}>
-                        {t.actualPnlPct >= 0 ? "+" : ""}{t.actualPnlPct.toFixed(2)}%
+                      <span
+                        className={
+                          t.outcome === "breakeven" || t.actualPnlPct === 0
+                            ? "text-muted-foreground"
+                            : t.actualPnlPct > 0
+                            ? "text-green-400"
+                            : "text-red-400"
+                        }
+                      >
+                        {t.actualPnlPct > 0 ? "+" : ""}{t.actualPnlPct.toFixed(2)}%
                       </span>
                     ) : (
                       <span className="text-xs text-yellow-500">Open</span>
@@ -149,7 +168,7 @@ export default function Journal() {
                 </tr>
 
                 {expandedId === t.id && (
-                  <tr key={`exp-${t.id}`}>
+                  <tr>
                     <td colSpan={8} className="px-4 py-4 bg-accent/10">
                       <div className="grid grid-cols-3 gap-4 max-w-lg">
                         <div>
@@ -186,6 +205,18 @@ export default function Journal() {
                             onChange={(e) => setEditMistakes(e.target.value)}
                           />
                         </div>
+                        <div>
+                          <div className="section-label mb-1.5">Allocated USD</div>
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            className="w-full bg-background border border-border rounded-sm px-3 py-1.5 text-sm font-mono text-foreground focus:outline-none"
+                            placeholder="e.g. 150"
+                            value={editAllocatedAmount}
+                            onChange={(e) => setEditAllocatedAmount(e.target.value)}
+                          />
+                        </div>
                       </div>
                       <div className="flex gap-2 mt-3">
                         <button
@@ -209,7 +240,7 @@ export default function Journal() {
                     </td>
                   </tr>
                 )}
-              </>
+              </Fragment>
             ))}
           </tbody>
         </table>

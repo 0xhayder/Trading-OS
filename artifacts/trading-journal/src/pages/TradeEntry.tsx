@@ -91,6 +91,7 @@ export default function TradeEntry() {
   const [form, setForm] = useState<TradeInput>(DEFAULTS);
   const [view, setView] = useState<View>("form");
   const [result, setResult] = useState<ScoreResult | null>(null);
+  const [allocatedAmountUsd, setAllocatedAmountUsd] = useState("");
   const [, setLocation] = useLocation();
   const { addTrade } = useTrades();
   const { addToWatchlist } = useWatchlist();
@@ -103,19 +104,26 @@ export default function TradeEntry() {
     if (!form.coin.trim()) return;
     const scored = scoreTradeInput(form, settings);
     setResult(scored);
+    const targetAmount = Math.round((settings.totalCapital * (scored.suggestedAllocationPct / 100)) * 100) / 100;
+    setAllocatedAmountUsd(String(targetAmount));
     setView("result");
   };
 
   const handleLogTrade = async () => {
     if (!result) return;
+    const parsedAllocated = parseFloat(allocatedAmountUsd);
+    const allocationValue = Number.isFinite(parsedAllocated) && parsedAllocated > 0 ? parsedAllocated : undefined;
+
     await addTrade({
       ...form,
       ...result,
+      allocatedAmountUsd: allocationValue,
       id: `t-${Date.now()}`,
       createdAt: new Date().toISOString(),
     });
     setForm(DEFAULTS);
     setResult(null);
+    setAllocatedAmountUsd("");
     setView("form");
     setLocation("/journal");
   };
@@ -130,6 +138,7 @@ export default function TradeEntry() {
     });
     setForm(DEFAULTS);
     setResult(null);
+    setAllocatedAmountUsd("");
     setView("form");
     setLocation("/watchlist");
   };
@@ -140,6 +149,20 @@ export default function TradeEntry() {
   };
 
   if (view === "result" && result) {
+    const capital = settings.totalCapital;
+    const allocationBandByStatus: Record<string, { min: number; max: number }> = {
+      "Balanced Trade": { min: 30, max: 40 },
+      "Aggressive Trade": { min: 40, max: 55 },
+      "Asymmetric Swing Trade": { min: 55, max: 70 },
+    };
+    const allocationBand = allocationBandByStatus[result.tradeStatus];
+    const minAllocationUsd = allocationBand
+      ? Math.round((capital * (allocationBand.min / 100)) * 100) / 100
+      : 0;
+    const maxAllocationUsd = allocationBand
+      ? Math.round((capital * (allocationBand.max / 100)) * 100) / 100
+      : 0;
+
     const isApproved = result.finalScore >= 60;
     const isWatchlist = result.finalScore >= 45 && result.finalScore < 60;
     const isRejected = result.finalScore < 45;
@@ -196,7 +219,18 @@ export default function TradeEntry() {
           <div className="grid grid-cols-2 gap-x-8 gap-y-3">
             {[
               { label: "Status", value: result.tradeStatus },
-              { label: "Allocation", value: `${result.suggestedAllocationPct}%` },
+              {
+                label: "Allocation",
+                value: allocationBand
+                  ? `${allocationBand.min}% - ${allocationBand.max}% (target ${result.suggestedAllocationPct}%)`
+                  : `${result.suggestedAllocationPct}%`,
+              },
+              {
+                label: "Allocation (USD)",
+                value: allocationBand
+                  ? `$${minAllocationUsd.toLocaleString()} - $${maxAllocationUsd.toLocaleString()}`
+                  : "$0 - $0",
+              },
               { label: "Stop Loss", value: `${result.suggestedSlPct}%` },
               { label: "Risk/Reward", value: result.suggestedRr > 0 ? `${result.suggestedRr}:1` : "—" },
             ].map(({ label, value }) => (
@@ -221,6 +255,24 @@ export default function TradeEntry() {
             {result.warnings.map((w, i) => (
               <div key={i} className="text-xs font-mono text-yellow-500/80">— {w}</div>
             ))}
+          </div>
+        )}
+
+        {isApproved && (
+          <div className="border border-border rounded-sm p-4 space-y-2">
+            <div className="section-label">Amount to Allocate (USD)</div>
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              className="w-full bg-background border border-border rounded-sm px-3 py-2 text-sm font-mono text-foreground focus:outline-none focus:border-ring"
+              placeholder="Enter exact amount used in this trade"
+              value={allocatedAmountUsd}
+              onChange={(e) => setAllocatedAmountUsd(e.target.value)}
+            />
+            <div className="text-xs text-muted-foreground font-mono">
+              Suggested range: {allocationBand ? `$${minAllocationUsd.toLocaleString()} - $${maxAllocationUsd.toLocaleString()}` : "No allocation"}
+            </div>
           </div>
         )}
 

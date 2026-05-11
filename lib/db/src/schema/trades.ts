@@ -29,6 +29,8 @@ export const tradesTable = pgTable("trades", {
   mode: text("mode").notNull().default("trade"),
   outcome: text("outcome"),
   actualPnlPct: real("actual_pnl_pct"),
+  allocatedAmountUsd: real("allocated_amount_usd"),
+  realizedPnlUsd: real("realized_pnl_usd"),
   exitPrice: real("exit_price"),
   mistakeTags: text("mistake_tags"),
   status: text("status").notNull().default("open"),

@@ -4,6 +4,17 @@ import { createSupabaseServiceRoleClient } from "@/lib/supabase/server";
 type JsonRow = Record<string, unknown>;
 type RouteContext = { params: Promise<{ resource?: string[] }> };
 
+function toFiniteNumber(value: unknown): number | undefined {
+  const num = Number(value);
+  return Number.isFinite(num) ? num : undefined;
+}
+
+function calculateRealizedPnlUsd(allocatedAmountUsd: number | undefined, pnlPct: number | undefined): number | null {
+  if (allocatedAmountUsd == null || pnlPct == null) return null;
+  const realized = allocatedAmountUsd * (pnlPct / 100);
+  return Math.round(realized * 100) / 100;
+}
+
 function splitWarnings(value: unknown): string[] {
   if (Array.isArray(value)) return value.filter((item): item is string => typeof item === "string");
   if (typeof value !== "string" || value.trim() === "") return [];
@@ -44,6 +55,8 @@ function toTrade(row: JsonRow) {
     warnings: splitWarnings(row.trade_warnings),
     finalDecision: String(row.final_decision ?? ""),
     createdAt: String(row.created_at ?? new Date().toISOString()),
+    allocatedAmountUsd: row.allocated_amount_usd == null ? undefined : Number(row.allocated_amount_usd),
+    realizedPnlUsd: row.realized_pnl_usd == null ? undefined : Number(row.realized_pnl_usd),
     outcome: typeof row.outcome === "string" ? row.outcome : undefined,
     actualPnlPct: row.actual_pnl_pct == null ? undefined : Number(row.actual_pnl_pct),
     mistakeTags: typeof row.mistake_tags === "string" ? row.mistake_tags : undefined,
@@ -91,6 +104,11 @@ function toTradeInsert(trade: JsonRow) {
     expected_loss_pct: -Number(trade.stopLossPct ?? 0),
     final_decision: trade.finalDecision,
     created_at: trade.createdAt ?? new Date().toISOString(),
+    allocated_amount_usd: toFiniteNumber(trade.allocatedAmountUsd) ?? null,
+    realized_pnl_usd: calculateRealizedPnlUsd(
+      toFiniteNumber(trade.allocatedAmountUsd),
+      toFiniteNumber(trade.actualPnlPct),
+    ),
   };
 }
 
@@ -101,6 +119,7 @@ function toTradeUpdate(patch: JsonRow) {
     update.status = patch.outcome ? "closed" : "open";
   }
   if ("actualPnlPct" in patch) update.actual_pnl_pct = patch.actualPnlPct ?? null;
+  if ("allocatedAmountUsd" in patch) update.allocated_amount_usd = toFiniteNumber(patch.allocatedAmountUsd) ?? null;
   if ("mistakeTags" in patch) update.mistake_tags = patch.mistakeTags ?? null;
   if ("notes" in patch) update.notes = patch.notes ?? "";
   return update;
@@ -203,13 +222,57 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   if (!Number.isFinite(numericId)) return errorResponse("A numeric id is required.");
 
   if (resource === "trades") {
+    const previousTradeResult = await supabase
+      .from("trades")
+      .select("id,allocated_amount_usd,actual_pnl_pct,realized_pnl_usd")
+      .eq("id", numericId)
+      .single();
+    if (previousTradeResult.error) return errorResponse(previousTradeResult.error.message, 500);
+    const previousTrade = previousTradeResult.data;
+
+    const tradePatch = toTradeUpdate(body);
+    const effectiveAllocatedAmountUsd = "allocatedAmountUsd" in body
+      ? toFiniteNumber(body.allocatedAmountUsd)
+      : toFiniteNumber(previousTrade?.allocated_amount_usd);
+    const effectivePnlPct = "actualPnlPct" in body
+      ? toFiniteNumber(body.actualPnlPct)
+      : toFiniteNumber(previousTrade?.actual_pnl_pct);
+    if ("allocatedAmountUsd" in body || "actualPnlPct" in body || "outcome" in body) {
+      if ("outcome" in body && !body.outcome) {
+        tradePatch.realized_pnl_usd = null;
+      } else {
+        tradePatch.realized_pnl_usd = calculateRealizedPnlUsd(effectiveAllocatedAmountUsd, effectivePnlPct);
+      }
+    }
+
     const { data, error } = await supabase
       .from("trades")
-      .update(toTradeUpdate(body))
+      .update(tradePatch)
       .eq("id", numericId)
       .select("*")
       .single();
     if (error) return errorResponse(error.message, 500);
+
+    const previousRealized = toFiniteNumber(previousTrade?.realized_pnl_usd) ?? 0;
+    const nextRealized = toFiniteNumber(data.realized_pnl_usd) ?? 0;
+    const capitalDelta = Math.round((nextRealized - previousRealized) * 100) / 100;
+    if (capitalDelta !== 0) {
+      const settingsResult = await supabase
+        .from("settings")
+        .select("id,total_capital")
+        .eq("id", 1)
+        .single();
+
+      if (settingsResult.error) return errorResponse(settingsResult.error.message, 500);
+      const currentCapital = Number(settingsResult.data.total_capital ?? 0);
+      const nextCapital = Math.round((currentCapital + capitalDelta) * 100) / 100;
+      const { error: settingsUpdateError } = await supabase
+        .from("settings")
+        .update({ total_capital: nextCapital })
+        .eq("id", 1);
+      if (settingsUpdateError) return errorResponse(settingsUpdateError.message, 500);
+    }
+
     return NextResponse.json(toTrade(data));
   }
 

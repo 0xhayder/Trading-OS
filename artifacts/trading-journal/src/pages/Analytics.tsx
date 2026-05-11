@@ -1,4 +1,14 @@
 import { useTrades } from "@/lib/store";
+import { useSettings } from "@/lib/store";
+import {
+  buildEquityCurveUsd,
+  initialCapitalUsd,
+  isBreakevenClosed,
+  isLosingClosed,
+  isWinningClosed,
+  totalRealizedUsd,
+  totalReturnPct,
+} from "@/lib/portfolioMetrics";
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, Cell } from "recharts";
 
 const TT = {
@@ -32,34 +42,36 @@ function Empty() {
 
 export default function Analytics() {
   const { trades } = useTrades();
+  const { settings } = useSettings();
   const closed = trades.filter((t) => t.outcome && t.actualPnlPct != null);
 
-  const wins = closed.filter((t) => (t.actualPnlPct ?? 0) > 0);
-  const losses = closed.filter((t) => (t.actualPnlPct ?? 0) <= 0);
-  const winRate = closed.length > 0 ? Math.round((wins.length / closed.length) * 100) : 0;
-  const totalPnl = closed.reduce((s, t) => s + (t.actualPnlPct ?? 0), 0);
+  const wins = closed.filter(isWinningClosed);
+  const losses = closed.filter(isLosingClosed);
+  const breakevens = closed.filter(isBreakevenClosed);
+  const decided = wins.length + losses.length;
+  const winRate = decided > 0 ? Math.round((wins.length / decided) * 100) : 0;
+  const totalPnlUsd = totalRealizedUsd(closed);
+  const initialUsd = initialCapitalUsd(settings.totalCapital, totalPnlUsd);
+  const totalPnl = totalReturnPct(initialUsd, totalPnlUsd);
 
-  let eq = 100;
-  const equityCurve = [...closed]
-    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
-    .map((t) => {
-      eq += t.actualPnlPct ?? 0;
-      return {
-        date: new Date(t.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
-        equity: Math.round(eq * 100) / 100,
-      };
-    });
+  const closedChrono = [...closed].sort(
+    (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+  );
+  const equityCurve = buildEquityCurveUsd(closedChrono, initialUsd);
 
-  const bySetup: Record<string, { wins: number; total: number }> = {};
+  const bySetup: Record<string, { wins: number; losses: number }> = {};
   for (const t of closed) {
-    if (!bySetup[t.setupType]) bySetup[t.setupType] = { wins: 0, total: 0 };
-    bySetup[t.setupType].total++;
-    if ((t.actualPnlPct ?? 0) > 0) bySetup[t.setupType].wins++;
+    if (!bySetup[t.setupType]) bySetup[t.setupType] = { wins: 0, losses: 0 };
+    if (t.outcome === "win") bySetup[t.setupType].wins++;
+    if (t.outcome === "loss") bySetup[t.setupType].losses++;
   }
-  const setupData = Object.entries(bySetup).map(([k, v]) => ({
-    name: k.replace(" Retest", " R.").replace(" Bottom", " Bot.").replace("Trendline ", "TL "),
-    wr: Math.round((v.wins / v.total) * 100),
-  }));
+  const setupData = Object.entries(bySetup).map(([k, v]) => {
+    const d = v.wins + v.losses;
+    return {
+      name: k.replace(" Retest", " R.").replace(" Bottom", " Bot.").replace("Trendline ", "TL "),
+      wr: d > 0 ? Math.round((v.wins / d) * 100) : 0,
+    };
+  });
 
   const mistakeFreq: Record<string, number> = {};
   for (const t of trades) {
@@ -79,12 +91,13 @@ export default function Analytics() {
         <p className="text-xs text-muted-foreground mt-0.5">{closed.length} closed trades</p>
       </div>
 
-      <div className="grid grid-cols-4 gap-3">
+      <div className="grid grid-cols-5 gap-3">
         {[
           { label: "Closed", value: String(closed.length) },
           { label: "Win Rate", value: `${winRate}%`, color: winRate >= 50 && closed.length > 0 ? "text-green-400" : closed.length > 0 ? "text-red-400" : undefined },
-          { label: "Total PnL", value: `${totalPnl >= 0 ? "+" : ""}${totalPnl.toFixed(2)}%`, color: totalPnl > 0 ? "text-green-400" : totalPnl < 0 ? "text-red-400" : undefined },
-          { label: "W / L", value: `${wins.length} / ${losses.length}` },
+          { label: "Account return", value: `${totalPnl >= 0 ? "+" : ""}${totalPnl.toFixed(2)}%`, color: totalPnl > 0 ? "text-green-400" : totalPnl < 0 ? "text-red-400" : undefined },
+          { label: "Total PnL (USD)", value: `${totalPnlUsd >= 0 ? "+" : ""}$${totalPnlUsd.toFixed(2)}`, color: totalPnlUsd > 0 ? "text-green-400" : totalPnlUsd < 0 ? "text-red-400" : undefined },
+          { label: "W / L", value: `${wins.length} / ${losses.length}${breakevens.length ? ` / ${breakevens.length}BE` : ""}` },
         ].map(({ label, value, color }) => (
           <div key={label} className="border border-border rounded-sm p-4">
             <div className="section-label mb-2">{label}</div>
@@ -93,10 +106,10 @@ export default function Analytics() {
         ))}
       </div>
 
-      <Section title="Equity Curve">
-        {equityCurve.length > 1 ? (
+      <Section title="Equity curve (USD)">
+        {closed.length > 0 ? (
           <ResponsiveContainer width="100%" height={160}>
-            <AreaChart data={equityCurve} margin={{ top: 4, right: 0, left: -28, bottom: 0 }}>
+            <AreaChart data={equityCurve} margin={{ top: 4, right: 8, left: 4, bottom: 0 }}>
               <defs>
                 <linearGradient id="ag" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor="hsl(0 0% 70%)" stopOpacity={0.1} />
@@ -104,9 +117,14 @@ export default function Analytics() {
                 </linearGradient>
               </defs>
               <XAxis dataKey="date" tick={{ fontSize: 10, fill: "hsl(0 0% 35%)", fontFamily: "var(--app-font-mono)" }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fontSize: 10, fill: "hsl(0 0% 35%)", fontFamily: "var(--app-font-mono)" }} axisLine={false} tickLine={false} />
-              <Tooltip {...TT} />
-              <Area type="monotone" dataKey="equity" stroke="hsl(0 0% 70%)" strokeWidth={1.5} fill="url(#ag)" dot={false} />
+              <YAxis
+                tick={{ fontSize: 10, fill: "hsl(0 0% 35%)", fontFamily: "var(--app-font-mono)" }}
+                axisLine={false}
+                tickLine={false}
+                tickFormatter={(v) => `$${Number(v).toLocaleString()}`}
+              />
+              <Tooltip {...TT} formatter={(v: number) => [`$${Number(v).toFixed(2)}`, "Equity"]} />
+              <Area type="monotone" dataKey="equityUsd" stroke="hsl(0 0% 70%)" strokeWidth={1.5} fill="url(#ag)" dot={false} />
             </AreaChart>
           </ResponsiveContainer>
         ) : <Empty />}

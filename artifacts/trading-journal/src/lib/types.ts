@@ -57,6 +57,8 @@ export interface ScoreResult {
 export interface Trade extends TradeInput, ScoreResult {
   id: string;
   createdAt: string;
+  allocatedAmountUsd?: number;
+  realizedPnlUsd?: number;
   outcome?: TradeOutcome;
   actualPnlPct?: number;
   mistakeTags?: string;
