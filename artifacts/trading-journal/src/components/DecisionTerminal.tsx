@@ -1,7 +1,7 @@
 import type { DecisionPresentation } from "@workspace/trading-engine";
 import type { TradeInput, ScoreResult } from "@/lib/types";
 import { formatTradeDateTime } from "@/lib/formatDates";
-import { AlertTriangle, Ban, CheckCircle2, Eye, OctagonX } from "lucide-react";
+import { AlertTriangle, Ban, Bookmark, CheckCircle2, Eye, OctagonX } from "lucide-react";
 
 function StateIcon({ icon }: { icon: DecisionPresentation["icon"] }) {
   const cls = "h-10 w-10 shrink-0";
@@ -328,6 +328,17 @@ export function DecisionTerminal({
             onClick={onLogTrade}
           >
             {p.primaryCta.label}
+          </button>
+        )}
+
+        {p.dominantState !== "watchlist" && (
+          <button
+            type="button"
+            title="Add to watchlist"
+            className="sm:w-12 py-3 flex items-center justify-center rounded-sm border border-border text-muted-foreground hover:text-sky-400 hover:border-sky-500/50 hover:bg-sky-950/20 transition-colors"
+            onClick={onWatchlist}
+          >
+            <Bookmark size={15} />
           </button>
         )}
 
