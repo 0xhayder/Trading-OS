@@ -44,14 +44,15 @@ export const engineTradeInputSchema = z.object({
   }),
   entry: z.object({
     rrNumeric: z.number().finite().positive(),
+    rrQuality: z.enum(["strong", "acceptable", "poor"]),
     entryEfficiency: z.enum(["perfect", "decent", "chased"]),
     distanceToResistance: z.enum(["large", "decent", "nearby"]),
     slEfficiency: z.enum(["structural", "acceptable", "poor"]),
   }),
   risk: z.object({
-    marketVolatility: z.enum(["low", "elevated", "high"]),
-    positionConcentration: z.enum(["low", "elevated", "high"]),
-    correlationExposure: z.enum(["low", "elevated", "high"]),
+    overextension: z.enum(["controlled", "extended", "euphoric"]),
+    eventRisk: z.enum(["low", "medium", "high"]),
+    liquidityRisk: z.enum(["safe", "caution", "dangerous"]),
   }),
   execution: z
     .object({

@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { useWatchlist } from "@/lib/store";
 import { Trash2 } from "lucide-react";
+import { formatTradeDateShort, formatTradeDateTime, formatTradeTimeOnly } from "@/lib/formatDates";
 
 export default function Watchlist() {
   const { watchlist, updateWatchlist, deleteFromWatchlist } = useWatchlist();
@@ -26,14 +27,15 @@ export default function Watchlist() {
     <div className="p-6 space-y-5">
       <div>
         <h1 className="text-sm font-semibold">Watchlist</h1>
-        <p className="text-xs text-muted-foreground mt-0.5">
-          Setups that scored 40–54. Tracked separately — outcomes do not affect capital.
+        <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
+          Setups you saved from the WATCHLIST path on the decision screen (often watchlist band 45–59, or your choice to
+          track). Outcomes here do not move account capital.
         </p>
       </div>
 
       {watchlist.length === 0 ? (
         <div className="border border-border rounded-sm py-12 text-center text-xs text-muted-foreground">
-          No watchlist entries yet. Setups scoring 40–54 will appear here.
+          No watchlist entries yet. Save one from the score result screen using “Save to watchlist”.
         </div>
       ) : (
         <div className="border border-border rounded-sm overflow-hidden">
@@ -51,14 +53,14 @@ export default function Watchlist() {
             </thead>
             <tbody className="divide-y divide-border">
               {watchlist.map((w) => (
-                <>
+                <Fragment key={w.id}>
                   <tr
-                    key={w.id}
                     className="hover:bg-accent/20 cursor-pointer"
                     onClick={() => expandedId === w.id ? setExpandedId(null) : openExpand(w.id)}
                   >
                     <td className="px-3 py-2.5 font-mono text-xs text-muted-foreground">
-                      {new Date(w.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                      <div>{formatTradeDateShort(w.createdAt)}</div>
+                      <div className="text-[10px] text-muted-foreground/80">{formatTradeTimeOnly(w.createdAt)}</div>
                     </td>
                     <td className="px-3 py-2.5 font-mono text-sm font-medium">{w.coin}</td>
                     <td className="px-3 py-2.5 text-xs text-muted-foreground">{w.setupType}</td>
@@ -76,8 +78,11 @@ export default function Watchlist() {
                   </tr>
 
                   {expandedId === w.id && (
-                    <tr key={`exp-${w.id}`}>
+                    <tr>
                       <td colSpan={7} className="px-4 py-4 bg-accent/10">
+                        <div className="text-[11px] font-mono text-muted-foreground mb-3">
+                          Saved: <span className="text-foreground/90">{formatTradeDateTime(w.createdAt)}</span>
+                        </div>
                         <div className="grid grid-cols-2 gap-4 max-w-md">
                           <div>
                             <div className="section-label mb-1.5">Outcome</div>
@@ -127,7 +132,7 @@ export default function Watchlist() {
                       </td>
                     </tr>
                   )}
-                </>
+                </Fragment>
               ))}
             </tbody>
           </table>

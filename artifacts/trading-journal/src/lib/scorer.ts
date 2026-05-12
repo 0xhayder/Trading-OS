@@ -1,4 +1,5 @@
 import {
+  buildDecisionPresentation,
   mapLegacyJournalToEngine,
   scoreEngineTrade,
   toLegacyApiScore,
@@ -6,11 +7,17 @@ import {
 import type { ScoreResult, Settings, TradeInput, TradeStatus } from "./types";
 
 function toUiStatus(status: string): TradeStatus {
-  if (status === "Reject Trade") return "Reject Trade";
-  if (status === "Watchlist Only") return "Watchlist Only";
-  if (status === "Balanced Trade") return "Balanced Trade";
-  if (status === "Aggressive Trade") return "Aggressive Trade";
-  return "Asymmetric Swing Trade";
+  const map: Record<string, TradeStatus> = {
+    "Reject Trade": "Reject Trade",
+    "Watchlist Only": "Watchlist Only",
+    "Standard Trade": "Standard Trade",
+    "High Conviction Trade": "High Conviction Trade",
+    "Expansion Trade": "Expansion Trade",
+    "Balanced Trade": "Balanced Trade",
+    "Aggressive Trade": "Aggressive Trade",
+    "Asymmetric Swing Trade": "Asymmetric Swing Trade",
+  };
+  return map[status] ?? "Reject Trade";
 }
 
 export function scoreTradeInput(input: TradeInput, settings?: Settings): ScoreResult {
@@ -20,6 +27,7 @@ export function scoreTradeInput(input: TradeInput, settings?: Settings): ScoreRe
     maxSinglePositionPct: 70,
   });
   const legacy = toLegacyApiScore(engine, engineInput.execution);
+  const presentation = buildDecisionPresentation(engine, engineInput);
 
   return {
     finalScore: legacy.finalScore,
@@ -30,5 +38,7 @@ export function scoreTradeInput(input: TradeInput, settings?: Settings): ScoreRe
     suggestedRr: legacy.suggestedRr,
     warnings: legacy.tradeWarnings ? legacy.tradeWarnings.split(" | ") : [],
     finalDecision: legacy.finalDecision,
+    scoredAt: new Date().toISOString(),
+    presentation,
   };
 }

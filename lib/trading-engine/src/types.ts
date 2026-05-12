@@ -6,12 +6,7 @@ export type TrendScoreLabel =
   | "bearish"
   | "strong_bearish";
 
-export type NarrativeScoreLabel =
-  | "hot"
-  | "active"
-  | "neutral"
-  | "weak"
-  | "dead";
+export type NarrativeScoreLabel = "hot" | "active" | "neutral" | "weak" | "dead";
 
 export type SetupType =
   | "breakout_retest"
@@ -21,14 +16,11 @@ export type SetupType =
 
 export type SrClarity = "extremely_obvious" | "clean" | "medium" | "forced";
 
-export type RetestConfirmation =
-  | "strong"
-  | "decent"
-  | "weak"
-  | "none";
+export type RetestConfirmation = "strong" | "decent" | "weak" | "none";
 
 export type HtfAlignment = "full" | "partial" | "conflict";
 
+/** Legacy structural liquidity bucket; optional context for filters / analytics */
 export type LiquiditySpace = "major_clean" | "moderate" | "heavy_resistance";
 
 export type RelVolumeBucket = "above_2x" | "one_point_five_x" | "average" | "below_average";
@@ -41,16 +33,35 @@ export type EntryEfficiency = "perfect" | "decent" | "chased";
 
 export type ResistanceDistance = "large" | "decent" | "nearby";
 
+export type RrQualityBand = "strong" | "acceptable" | "poor";
+
+export type OverextensionBand = "controlled" | "extended" | "euphoric";
+
+export type EventRiskBand = "low" | "medium" | "high";
+
+export type LiquidityRiskBand = "safe" | "caution" | "dangerous";
+
 export type SlEfficiency = "structural" | "acceptable" | "poor";
 
-export type RiskSeverity = "low" | "elevated" | "high";
-
+/** Post–multi-layer pipeline trade buckets */
 export type TradeClassification =
   | "reject"
   | "watchlist_only"
-  | "balanced_trade"
-  | "aggressive_trade"
-  | "asymmetric_swing_trade";
+  | "standard_trade"
+  | "high_conviction_trade"
+  | "expansion_trade";
+
+export type AggressionLevel = "none" | "cautious" | "standard" | "elevated" | "maximum";
+
+export interface RrEngineOutput {
+  suggestedSlPct: number;
+  suggestedRrStructure: string;
+  runnerAllowed: boolean;
+  multiTpScaling: boolean;
+  asymmetricRrPreferred: boolean;
+  rrAggressionTolerance: number;
+  notes: string[];
+}
 
 /** Full discretionary → quantified input */
 export interface EngineTradeInput {
@@ -67,7 +78,7 @@ export interface EngineTradeInput {
     liquiditySpace: LiquiditySpace;
   };
   momentum: {
-    /** dailyVolume / marketCap */
+    /** dailyVolume / marketCap — reserved for ML / future weighting */
     volumeToMcapRatio: number;
     relVolume: RelVolumeBucket;
     candleStrength: MomentumCandle;
@@ -76,14 +87,15 @@ export interface EngineTradeInput {
   entry: {
     /** reward / risk (unitless) */
     rrNumeric: number;
+    rrQuality: RrQualityBand;
     entryEfficiency: EntryEfficiency;
     distanceToResistance: ResistanceDistance;
     slEfficiency: SlEfficiency;
   };
   risk: {
-    marketVolatility: RiskSeverity;
-    positionConcentration: RiskSeverity;
-    correlationExposure: RiskSeverity;
+    overextension: OverextensionBand;
+    eventRisk: EventRiskBand;
+    liquidityRisk: LiquidityRiskBand;
   };
   execution?: {
     stopLossPct: number;
@@ -103,9 +115,13 @@ export interface FactorBreakdownRow {
 
 export interface LayerScore {
   layer: FactorBreakdownRow["layer"];
+  /** Internal blend in roughly [-2, 1] before 0–100 mapping */
   score: number;
-  /** Weight applied in final formula (e.g. 0.25 for market) */
+  /** 0–100 layer quality for dashboards */
+  score100: number;
+  /** Effective weight in final 0–100 blend (sums to 1 across layers) */
   layerWeight: number;
+  /** Contribution to final 0–100 score */
   weighted: number;
   factors: FactorBreakdownRow[];
 }
@@ -114,73 +130,92 @@ export interface AllocationPlan {
   minPct: number;
   maxPct: number;
   targetPct: number;
-  /** Minimum RR implied by chosen allocation band (institutional guardrail) */
   impliedMinRr: number;
   adjustments: string[];
+  /** Nonlinear curve identifier for analytics */
+  curveId: string;
+}
+
+export interface HardFilterTrace {
+  ruleId: string;
+  action: "pass" | "reject" | "watchlist_only" | "cap_classification" | "compress";
+  detail: string;
+}
+
+export interface PipelineDiagnostics {
+  hardFilters: HardFilterTrace[];
+  conditionalRules: string[];
+  positiveSynergies: string[];
+  negativeSynergies: string[];
+  riskCompression: string[];
+  classificationDowngradeReasons: string[];
+  /** Opaque numeric fingerprint for backtests / ML */
+  hiddenBlendFingerprint: number;
 }
 
 export interface EngineScoreResult {
   engineVersion: string;
   normalizedScore: number;
+  /** Monotonic raw blend in [-1, 1] for legacy charts */
   combinedRaw: number;
   classification: TradeClassification;
   layers: LayerScore[];
   allocation: AllocationPlan;
   expectedRr: number;
   rrFromExecution?: number;
+  rrEngine: RrEngineOutput;
   warnings: string[];
   approval: { approved: boolean; reason: string };
-  /** Serialized-friendly breakdown for DB */
   factorRows: FactorBreakdownRow[];
+  layerScores100: Record<LayerScore["layer"], number>;
+  activeSynergies: string[];
+  activePenalties: string[];
+  aggressionLevel: AggressionLevel;
+  confidenceStability: number;
+  reasoningSummary: string;
+  diagnostics: PipelineDiagnostics;
 }
 
 export interface UserRiskSettings {
   baseAccountEquity: number;
-  /** Hard cap on any single position as % of equity */
   maxSinglePositionPct: number;
-  /** Optional override for factor weights / layer weights */
   factorConfig?: Partial<EngineConfig>;
 }
 
-/** Serializable engine configuration */
 export interface EngineConfig {
   layerWeights: {
-    market: number;
     structure: number;
+    market: number;
     momentum: number;
     entry: number;
     risk: number;
   };
-  market: { btc: number; alt: number; narrative: number };
   structure: {
-    setup: number;
-    sr: number;
     retest: number;
+    levelClarity: number;
     htf: number;
-    liquidity: number;
   };
+  market: { btc: number; alt: number; narrative: number };
   momentum: {
-    volMcap: number;
-    relVol: number;
+    volume: number;
     candle: number;
-    velocity: number;
+    followThrough: number;
   };
   entry: {
-    rr: number;
-    entryEff: number;
-    resistance: number;
-    sl: number;
+    entryDistance: number;
+    resistanceSpace: number;
+    rrQuality: number;
   };
   risk: {
-    vol: number;
-    concentration: number;
-    correlation: number;
+    overextension: number;
+    eventRisk: number;
+    liquidityRisk: number;
   };
   classificationThresholds: {
-    rejectBelow: number;
+    rejectMax: number;
     watchlistMax: number;
-    balancedMax: number;
-    aggressiveMax: number;
+    standardMax: number;
+    highConvictionMax: number;
   };
   allocationBands: Record<
     Exclude<TradeClassification, "reject" | "watchlist_only">,
@@ -223,10 +258,7 @@ export interface AnalyticsReport {
   bestTimeframes: { timeframe: string; tradeCount: number; winRate: number; pnlPctSum: number }[];
   mistakeFrequency: { tag: string; count: number }[];
   psychologicalErrors: { tag: string; count: number }[];
-  byMarketRegime: Record<
-    string,
-    { tradeCount: number; winRate: number; pnlPctSum: number }
-  >;
+  byMarketRegime: Record<string, { tradeCount: number; winRate: number; pnlPctSum: number }>;
   rejectedFollowup?: {
     hypotheticalWins: number;
     falseNegatives: number;

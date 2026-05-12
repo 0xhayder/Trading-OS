@@ -11,6 +11,7 @@ import {
   totalReturnPct,
 } from "@/lib/portfolioMetrics";
 import { AreaChart, Area, XAxis, YAxis, ResponsiveContainer, Tooltip } from "recharts";
+import { formatTradeDateTime } from "@/lib/formatDates";
 
 const TT = {
   contentStyle: {
@@ -58,6 +59,9 @@ export default function Dashboard() {
     .slice(0, 6);
 
   const statusColor: Record<string, string> = {
+    "Expansion Trade": "text-green-400",
+    "High Conviction Trade": "text-green-400",
+    "Standard Trade": "text-foreground/70",
     "Asymmetric Swing Trade": "text-green-400",
     "Aggressive Trade": "text-green-400",
     "Balanced Trade": "text-foreground/70",
@@ -166,7 +170,7 @@ export default function Dashboard() {
                     <span className="text-muted-foreground text-xs">· {t.timeframe}</span>
                   </div>
                   <div className="text-[10px] text-muted-foreground font-mono mt-0.5">
-                    {new Date(t.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                    {formatTradeDateTime(t.createdAt)}
                   </div>
                 </div>
                 <div className="text-right shrink-0">

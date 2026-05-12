@@ -10,7 +10,9 @@ export function buildWarnings(
   const w: string[] = [];
 
   if (classification === "reject") {
-    w.push(`Score ${normalizedScore.toFixed(1)} below institutional minimum — ${classificationToDisplayName(classification)}.`);
+    w.push(
+      `Score ${normalizedScore.toFixed(1)} below institutional minimum — ${classificationToDisplayName(classification)}.`,
+    );
   } else if (classification === "watchlist_only") {
     w.push("Observation mode only — wait for structure or momentum confirmation.");
   }
@@ -41,12 +43,16 @@ export function buildWarnings(
     );
   }
 
-  if (input.risk.marketVolatility === "high") {
-    w.push("Macro volatility hot — widen invalidation or cut size.");
+  if (input.risk.overextension === "euphoric") {
+    w.push("Euphoric extension — compression on momentum and sizing active.");
   }
 
-  if (input.risk.correlationExposure === "high") {
-    w.push("Correlation cluster risk — diversification violated.");
+  if (input.risk.liquidityRisk === "dangerous") {
+    w.push("Liquidity cluster risk — slippage / stop-hunt exposure elevated.");
+  }
+
+  if (input.risk.eventRisk === "high") {
+    w.push("High scheduled / headline event risk — prefer reduced size or sidelines.");
   }
 
   return w;

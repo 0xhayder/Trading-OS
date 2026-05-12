@@ -30,7 +30,7 @@ export function mapLegacyJournalToEngine(input: {
   const srClarity = mapSr(input.levelClarity);
   const htfAlignment = mapHtf(input.timeframeAlignment);
   const retestConfirmation = mapRetest(input.retestQuality);
-  const liquiditySpace = mapLiquidityFromSpace(input.spaceToResistance);
+  const liquiditySpace = mapLiquiditySpaceFromResistance(input.spaceToResistance);
 
   const relVolume = mapRelVol(input.volumeStrength);
   const candleStrength = mapCandle(input.candleImpulse);
@@ -38,13 +38,10 @@ export function mapLegacyJournalToEngine(input: {
   const volumeToMcapRatio = inferVolumeMcapFromLegacy(input.volumeStrength);
 
   const rrNumeric = computeRrFromPct(input.stopLossPct, input.tp1Pct, input.tp2Pct, input.rrQuality);
+  const rrQuality = mapRrQualityBand(input.rrQuality, rrNumeric);
   const entryEfficiency = mapEntryEfficiency(input.entryDistance);
   const distanceToResistance = mapResistance(input.spaceToResistance);
   const slEfficiency = inferSlFromRr(input.rrQuality, input.stopLossPct);
-
-  const marketVolatility = mapVolFromOverextension(input.overextension);
-  const positionConcentration = mapConcentration(input.eventRisk);
-  const correlationExposure = mapCorrelation(input.liquidityRisk);
 
   return {
     market: { btcTrend, altTrend, narrative },
@@ -63,14 +60,15 @@ export function mapLegacyJournalToEngine(input: {
     },
     entry: {
       rrNumeric,
+      rrQuality,
       entryEfficiency,
       distanceToResistance,
       slEfficiency,
     },
     risk: {
-      marketVolatility,
-      positionConcentration,
-      correlationExposure,
+      overextension: mapOverextension(input.overextension),
+      eventRisk: mapEventRisk(input.eventRisk),
+      liquidityRisk: mapLiquidityRisk(input.liquidityRisk),
     },
     execution: {
       stopLossPct: input.stopLossPct,
@@ -130,9 +128,7 @@ function mapRetest(s: string): EngineTradeInput["structure"]["retestConfirmation
   return "none";
 }
 
-function mapLiquidityFromSpace(
-  s: string,
-): EngineTradeInput["structure"]["liquiditySpace"] {
+function mapLiquiditySpaceFromResistance(s: string): EngineTradeInput["structure"]["liquiditySpace"] {
   const x = s.toLowerCase();
   if (x.includes("large")) return "major_clean";
   if (x.includes("limited") || x.includes("tight")) return "heavy_resistance";
@@ -184,12 +180,17 @@ function mapResistance(s: string): EngineTradeInput["entry"]["distanceToResistan
   return "decent";
 }
 
-function computeRrFromPct(
-  sl: number,
-  tp1: number,
-  tp2: number,
-  rrQuality: string,
-): number {
+function mapRrQualityBand(q: string, rrNumeric: number): EngineTradeInput["entry"]["rrQuality"] {
+  const x = q.toLowerCase();
+  if (x.includes("poor")) return "poor";
+  if (x.includes("acceptable") || x.includes("2 to 3")) return "acceptable";
+  if (x.includes("asymmetric") || x.includes("> 5") || x.includes("3 to 5")) return "strong";
+  if (rrNumeric >= 4) return "strong";
+  if (rrNumeric >= 2.2) return "acceptable";
+  return "acceptable";
+}
+
+function computeRrFromPct(sl: number, tp1: number, tp2: number, rrQuality: string): number {
   if (sl > 0) {
     const rr = (tp1 / sl + tp2 / sl) / 2;
     if (Number.isFinite(rr) && rr > 0) return Math.max(rr, 0.25);
@@ -211,25 +212,25 @@ function inferSlFromRr(
   return "structural";
 }
 
-function mapVolFromOverextension(s: string): EngineTradeInput["risk"]["marketVolatility"] {
+function mapOverextension(s: string): EngineTradeInput["risk"]["overextension"] {
   const x = s.toLowerCase();
-  if (x.includes("euphor") || x.includes("panic")) return "high";
-  if (x.includes("extend")) return "elevated";
-  return "low";
+  if (x.includes("euphor") || x.includes("panic")) return "euphoric";
+  if (x.includes("extend")) return "extended";
+  return "controlled";
 }
 
-function mapConcentration(s: string): EngineTradeInput["risk"]["positionConcentration"] {
+function mapEventRisk(s: string): EngineTradeInput["risk"]["eventRisk"] {
   const x = s.toLowerCase();
   if (x.includes("high")) return "high";
-  if (x.includes("medium")) return "elevated";
+  if (x.includes("medium") || x.includes("elevated")) return "medium";
   return "low";
 }
 
-function mapCorrelation(s: string): EngineTradeInput["risk"]["correlationExposure"] {
+function mapLiquidityRisk(s: string): EngineTradeInput["risk"]["liquidityRisk"] {
   const x = s.toLowerCase();
-  if (x.includes("danger")) return "high";
-  if (x.includes("acceptable")) return "elevated";
-  return "low";
+  if (x.includes("danger")) return "dangerous";
+  if (x.includes("acceptable") || x.includes("caution") || x.includes("medium")) return "caution";
+  return "safe";
 }
 
 /** Flatten engine output for API / DB storage */
@@ -257,7 +258,7 @@ export function toLegacyApiScore(
   execution?: { stopLossPct: number; tp1Pct: number; tp2Pct: number },
 ): LegacyApiScorePayload {
   const alloc = engine.allocation.targetPct;
-  const sl = execution?.stopLossPct ?? 1;
+  const sl = engine.rrEngine.suggestedSlPct ?? execution?.stopLossPct ?? 1;
   const tp2 = execution?.tp2Pct ?? 0;
   const calculatedRisk = alloc > 0 ? Math.round((sl / 100) * alloc * 100) / 100 : 0;
   const expectedProfitPct = Math.round(alloc * (tp2 / 100) * 100) / 100;
@@ -270,8 +271,8 @@ export function toLegacyApiScore(
     suggestedSlPct: sl,
     suggestedTpStructure:
       execution != null
-        ? `TP1 at ${execution.tp1Pct}% / TP2 at ${execution.tp2Pct}% — size tier ${engine.classification}`
-        : "Define execution brackets to project ladder.",
+        ? `${engine.rrEngine.suggestedRrStructure} — TP1 ${execution.tp1Pct}% / TP2 ${execution.tp2Pct}% (${engine.classification.replace(/_/g, " ")})`
+        : engine.rrEngine.suggestedRrStructure,
     suggestedRr: engine.expectedRr,
     tradeWarnings: engine.warnings.join(" | "),
     calculatedRisk,
@@ -286,13 +287,22 @@ export function toLegacyApiScore(
     approvalReason: engine.approval.reason,
     scoreBreakdown: {
       combinedRaw: engine.combinedRaw,
+      layerScores100: engine.layerScores100,
       layers: engine.layers.map((l) => ({
         layer: l.layer,
         score: l.score,
+        score100: l.score100,
         weighted: l.weighted,
       })),
       factors: engine.factorRows,
       allocation: engine.allocation,
+      activeSynergies: engine.activeSynergies,
+      activePenalties: engine.activePenalties,
+      aggressionLevel: engine.aggressionLevel,
+      confidenceStability: engine.confidenceStability,
+      reasoningSummary: engine.reasoningSummary,
+      diagnostics: engine.diagnostics,
+      rrEngine: engine.rrEngine,
     },
   };
 }

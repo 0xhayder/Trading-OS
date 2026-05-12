@@ -1,66 +1,60 @@
 import type { EngineConfig } from "./types";
 
+/** Default weights match the multi-layer specification (admin-editable via merge). */
 export const DEFAULT_ENGINE_CONFIG: EngineConfig = {
   layerWeights: {
+    structure: 0.35,
     market: 0.25,
-    structure: 0.3,
     momentum: 0.2,
     entry: 0.15,
-    risk: 0.1,
-  },
-  market: {
-    btc: 0.4,
-    alt: 0.35,
-    narrative: 0.25,
+    risk: 0.05,
   },
   structure: {
-    setup: 0.2,
-    sr: 0.25,
-    retest: 0.25,
-    htf: 0.2,
-    liquidity: 0.1,
+    retest: 0.4,
+    levelClarity: 0.35,
+    htf: 0.25,
+  },
+  market: {
+    btc: 0.45,
+    alt: 0.35,
+    narrative: 0.2,
   },
   momentum: {
-    volMcap: 0.35,
-    relVol: 0.3,
-    candle: 0.2,
-    velocity: 0.15,
+    volume: 0.4,
+    candle: 0.35,
+    followThrough: 0.25,
   },
   entry: {
-    rr: 0.35,
-    entryEff: 0.3,
-    resistance: 0.2,
-    sl: 0.15,
+    entryDistance: 0.35,
+    resistanceSpace: 0.4,
+    rrQuality: 0.25,
   },
   risk: {
-    vol: 0.35,
-    concentration: 0.35,
-    correlation: 0.3,
+    overextension: 0.45,
+    eventRisk: 0.35,
+    liquidityRisk: 0.2,
   },
   classificationThresholds: {
-    rejectBelow: 45,
-    watchlistMax: 60,
-    balancedMax: 75,
-    aggressiveMax: 85,
+    rejectMax: 44,
+    watchlistMax: 59,
+    standardMax: 74,
+    highConvictionMax: 87,
   },
   allocationBands: {
-    balanced_trade: { min: 30, max: 40 },
-    aggressive_trade: { min: 40, max: 55 },
-    asymmetric_swing_trade: { min: 55, max: 70 },
+    standard_trade: { min: 10, max: 18 },
+    high_conviction_trade: { min: 20, max: 35 },
+    expansion_trade: { min: 35, max: 60 },
   },
 };
 
-export function mergeEngineConfig(
-  base: EngineConfig,
-  patch?: Partial<EngineConfig>,
-): EngineConfig {
+export function mergeEngineConfig(base: EngineConfig, patch?: Partial<EngineConfig>): EngineConfig {
   if (!patch) return base;
   return {
     ...base,
     ...patch,
     layerWeights: { ...base.layerWeights, ...patch.layerWeights },
-    market: { ...base.market, ...patch.market },
     structure: { ...base.structure, ...patch.structure },
+    market: { ...base.market, ...patch.market },
     momentum: { ...base.momentum, ...patch.momentum },
     entry: { ...base.entry, ...patch.entry },
     risk: { ...base.risk, ...patch.risk },

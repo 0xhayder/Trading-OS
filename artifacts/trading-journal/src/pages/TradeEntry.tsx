@@ -3,7 +3,8 @@ import { useLocation } from "wouter";
 import { useSettings, useTrades, useWatchlist } from "@/lib/store";
 import { scoreTradeInput } from "@/lib/scorer";
 import type { TradeInput, ScoreResult, SetupType, Timeframe, MarketCondition, NarrativeStrength, LevelClarity, TfAlignment, RetestQuality, VolumeStrength, CandleImpulse, FollowThrough, EntryDistance, SpaceToResistance, RRQuality, Overextension, EventRisk, LiquidityRisk } from "@/lib/types";
-import { ArrowLeft, AlertTriangle } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
+import { DecisionTerminal } from "@/components/DecisionTerminal";
 
 const DEFAULTS: TradeInput = {
   coin: "",
@@ -111,15 +112,17 @@ export default function TradeEntry() {
 
   const handleLogTrade = async () => {
     if (!result) return;
+    if (result.presentation?.dominantState === "hard_reject") return;
     const parsedAllocated = parseFloat(allocatedAmountUsd);
     const allocationValue = Number.isFinite(parsedAllocated) && parsedAllocated > 0 ? parsedAllocated : undefined;
 
+    const loggedAt = new Date().toISOString();
     await addTrade({
       ...form,
       ...result,
       allocatedAmountUsd: allocationValue,
       id: `t-${Date.now()}`,
-      createdAt: new Date().toISOString(),
+      createdAt: loggedAt,
     });
     setForm(DEFAULTS);
     setResult(null);
@@ -130,11 +133,12 @@ export default function TradeEntry() {
 
   const handleAddToWatchlist = async () => {
     if (!result) return;
+    const savedAt = new Date().toISOString();
     await addToWatchlist({
       ...form,
       ...result,
       id: `w-${Date.now()}`,
-      createdAt: new Date().toISOString(),
+      createdAt: savedAt,
     });
     setForm(DEFAULTS);
     setResult(null);
@@ -151,9 +155,12 @@ export default function TradeEntry() {
   if (view === "result" && result) {
     const capital = settings.totalCapital;
     const allocationBandByStatus: Record<string, { min: number; max: number }> = {
-      "Balanced Trade": { min: 30, max: 40 },
-      "Aggressive Trade": { min: 40, max: 55 },
-      "Asymmetric Swing Trade": { min: 55, max: 70 },
+      "Standard Trade": { min: 10, max: 18 },
+      "High Conviction Trade": { min: 20, max: 35 },
+      "Expansion Trade": { min: 35, max: 60 },
+      "Balanced Trade": { min: 10, max: 18 },
+      "Aggressive Trade": { min: 20, max: 35 },
+      "Asymmetric Swing Trade": { min: 35, max: 60 },
     };
     const allocationBand = allocationBandByStatus[result.tradeStatus];
     const minAllocationUsd = allocationBand
@@ -163,31 +170,10 @@ export default function TradeEntry() {
       ? Math.round((capital * (allocationBand.max / 100)) * 100) / 100
       : 0;
 
-    const isApproved = result.finalScore >= 60;
-    const isWatchlist = result.finalScore >= 45 && result.finalScore < 60;
-    const isRejected = result.finalScore < 45;
-
-    const scoreColor = isRejected
-      ? "text-red-400"
-      : isWatchlist
-      ? "text-yellow-500"
-      : "text-green-400";
-
-    const borderColor = isRejected
-      ? "border-red-400/20"
-      : isWatchlist
-      ? "border-yellow-500/20"
-      : "border-green-400/20";
-
-    const bgColor = isRejected
-      ? "bg-red-400/5"
-      : isWatchlist
-      ? "bg-yellow-500/5"
-      : "bg-green-400/5";
-
     return (
-      <div className="p-6 space-y-5">
+      <div className="p-6 space-y-5 max-w-3xl mx-auto">
         <button
+          type="button"
           className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
           onClick={handleDiscard}
         >
@@ -196,118 +182,31 @@ export default function TradeEntry() {
         </button>
 
         <div>
-          <h1 className="text-sm font-semibold">Score Result</h1>
-          <p className="text-xs text-muted-foreground mt-0.5 font-mono">{form.coin} · {form.setupType} · {form.timeframe}</p>
+          <h1 className="text-sm font-semibold text-muted-foreground">Decision terminal</h1>
+          <p className="text-xs text-muted-foreground mt-0.5 font-mono">
+            {form.coin} · {form.setupType} · {form.timeframe}
+          </p>
         </div>
 
-        <div className={`border ${borderColor} ${bgColor} rounded-sm p-5 space-y-4`}>
-          <div className="flex items-start justify-between">
-            <div>
-              <div className="section-label mb-1">System Decision</div>
-              <div className={`font-mono text-base font-semibold ${scoreColor}`}>{result.finalDecision}</div>
-            </div>
-            <div className="text-right">
-              <div className="section-label mb-1">Score</div>
-              <div className={`font-mono text-3xl font-bold ${scoreColor}`}>
-                {result.finalScore}<span className="text-sm text-muted-foreground font-normal">/100</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="h-px bg-border" />
-
-          <div className="grid grid-cols-2 gap-x-8 gap-y-3">
-            {[
-              { label: "Status", value: result.tradeStatus },
-              {
-                label: "Allocation",
-                value: allocationBand
-                  ? `${allocationBand.min}% - ${allocationBand.max}% (target ${result.suggestedAllocationPct}%)`
-                  : `${result.suggestedAllocationPct}%`,
-              },
-              {
-                label: "Allocation (USD)",
-                value: allocationBand
-                  ? `$${minAllocationUsd.toLocaleString()} - $${maxAllocationUsd.toLocaleString()}`
-                  : "$0 - $0",
-              },
-              { label: "Stop Loss", value: `${result.suggestedSlPct}%` },
-              { label: "Risk/Reward", value: result.suggestedRr > 0 ? `${result.suggestedRr}:1` : "—" },
-            ].map(({ label, value }) => (
-              <div key={label} className="flex justify-between text-sm">
-                <span className="text-muted-foreground">{label}</span>
-                <span className="font-mono">{value}</span>
-              </div>
-            ))}
-          </div>
-
-          {result.suggestedRr > 0 && (
-            <div className="text-xs font-mono text-muted-foreground">{result.suggestedTpStructure}</div>
-          )}
-        </div>
-
-        {result.warnings.length > 0 && (
-          <div className="border border-yellow-500/20 rounded-sm p-4 space-y-2">
-            <div className="flex items-center gap-1.5 section-label text-yellow-600">
-              <AlertTriangle size={10} />
-              Warnings
-            </div>
-            {result.warnings.map((w, i) => (
-              <div key={i} className="text-xs font-mono text-yellow-500/80">— {w}</div>
-            ))}
+        {result.presentation ? (
+          <DecisionTerminal
+            form={form}
+            result={result}
+            presentation={result.presentation}
+            capital={capital}
+            minAllocationUsd={minAllocationUsd}
+            maxAllocationUsd={maxAllocationUsd}
+            allocatedAmountUsd={allocatedAmountUsd}
+            setAllocatedAmountUsd={setAllocatedAmountUsd}
+            onLogTrade={handleLogTrade}
+            onWatchlist={handleAddToWatchlist}
+            onDiscard={handleDiscard}
+          />
+        ) : (
+          <div className="text-sm text-muted-foreground border border-border rounded-sm p-4">
+            This saved result has no presentation layer. Re-score the setup to see the new terminal.
           </div>
         )}
-
-        {isApproved && (
-          <div className="border border-border rounded-sm p-4 space-y-2">
-            <div className="section-label">Amount to Allocate (USD)</div>
-            <input
-              type="number"
-              min="0"
-              step="0.01"
-              className="w-full bg-background border border-border rounded-sm px-3 py-2 text-sm font-mono text-foreground focus:outline-none focus:border-ring"
-              placeholder="Enter exact amount used in this trade"
-              value={allocatedAmountUsd}
-              onChange={(e) => setAllocatedAmountUsd(e.target.value)}
-            />
-            <div className="text-xs text-muted-foreground font-mono">
-              Suggested range: {allocationBand ? `$${minAllocationUsd.toLocaleString()} - $${maxAllocationUsd.toLocaleString()}` : "No allocation"}
-            </div>
-          </div>
-        )}
-
-        <div className="flex gap-2 pt-1">
-          {isApproved && (
-            <button
-              className="flex-1 py-2.5 text-sm font-mono bg-foreground text-background rounded-sm hover:opacity-90 transition-opacity"
-              onClick={handleLogTrade}
-            >
-              Log Trade
-            </button>
-          )}
-          {isWatchlist && (
-            <button
-              className="flex-1 py-2.5 text-sm font-mono bg-foreground text-background rounded-sm hover:opacity-90 transition-opacity"
-              onClick={handleAddToWatchlist}
-            >
-              Add to Watchlist
-            </button>
-          )}
-          {isRejected && (
-            <button
-              className="flex-1 py-2.5 text-sm font-mono border border-border text-muted-foreground rounded-sm hover:text-foreground"
-              onClick={handleLogTrade}
-            >
-              Log Anyway (Rejected)
-            </button>
-          )}
-          <button
-            className="px-5 py-2.5 text-sm font-mono border border-border text-muted-foreground rounded-sm hover:text-foreground"
-            onClick={handleDiscard}
-          >
-            Discard
-          </button>
-        </div>
       </div>
     );
   }

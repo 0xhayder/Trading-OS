@@ -1,3 +1,5 @@
+import type { DecisionPresentation } from "@workspace/trading-engine";
+
 export type SetupType = "Breakout Retest" | "Double Bottom" | "Trendline Reclaim" | "Trend Continuation";
 export type Timeframe = "4H" | "Daily" | "Weekly";
 export type MarketCondition = "Strong Bullish" | "Bullish" | "Neutral" | "Bearish" | "Strong Bearish";
@@ -15,7 +17,16 @@ export type Overextension = "Calm" | "Extended" | "Euphoric";
 export type EventRisk = "Low" | "Medium" | "High";
 export type LiquidityRisk = "High Liquidity" | "Acceptable" | "Dangerous";
 
-export type TradeStatus = "Reject Trade" | "Watchlist Only" | "Balanced Trade" | "Aggressive Trade" | "Asymmetric Swing Trade";
+export type TradeStatus =
+  | "Reject Trade"
+  | "Watchlist Only"
+  | "Standard Trade"
+  | "High Conviction Trade"
+  | "Expansion Trade"
+  /** Legacy rows saved before engine v3 */
+  | "Balanced Trade"
+  | "Aggressive Trade"
+  | "Asymmetric Swing Trade";
 export type TradeOutcome = "win" | "loss" | "breakeven";
 
 export interface TradeInput {
@@ -52,6 +63,10 @@ export interface ScoreResult {
   suggestedRr: number;
   warnings: string[];
   finalDecision: string;
+  /** When this score was produced (ISO). Shown on the decision screen. */
+  scoredAt?: string;
+  /** Rich institutional-style decision terminal payload (missing on very old saved rows) */
+  presentation?: DecisionPresentation;
 }
 
 export interface Trade extends TradeInput, ScoreResult {

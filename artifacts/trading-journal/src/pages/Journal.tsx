@@ -2,6 +2,7 @@ import { Fragment, useState } from "react";
 import { useSettings, useTrades } from "@/lib/store";
 import { Trash2, ChevronUp, ChevronDown } from "lucide-react";
 import type { Trade, TradeOutcome } from "@/lib/types";
+import { formatTradeDateShort, formatTradeDateTime, formatTradeTimeOnly } from "@/lib/formatDates";
 
 type SortKey = "createdAt" | "finalScore" | "actualPnlPct";
 
@@ -133,7 +134,8 @@ export default function Journal() {
                   onClick={() => expandedId === t.id ? setExpandedId(null) : openExpand(t)}
                 >
                   <td className="px-3 py-2.5 font-mono text-xs text-muted-foreground whitespace-nowrap">
-                    {new Date(t.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                    <div>{formatTradeDateShort(t.createdAt)}</div>
+                    <div className="text-[10px] text-muted-foreground/80">{formatTradeTimeOnly(t.createdAt)}</div>
                   </td>
                   <td className="px-3 py-2.5 font-mono text-sm font-medium">{t.coin}</td>
                   <td className="px-3 py-2.5 text-xs text-muted-foreground">{t.setupType}</td>
@@ -170,6 +172,9 @@ export default function Journal() {
                 {expandedId === t.id && (
                   <tr>
                     <td colSpan={8} className="px-4 py-4 bg-accent/10">
+                      <div className="text-[11px] font-mono text-muted-foreground mb-3">
+                        Logged: <span className="text-foreground/90">{formatTradeDateTime(t.createdAt)}</span>
+                      </div>
                       <div className="grid grid-cols-3 gap-4 max-w-lg">
                         <div>
                           <div className="section-label mb-1.5">Outcome</div>
