@@ -1,10 +1,13 @@
 import { useEffect, useRef, useState } from "react";
-import type { Settings, Trade, WatchlistTrade } from "./types";
+import type { CapitalAdjustment, Settings, Trade, WatchlistTrade } from "./types";
 import {
+  createCapitalAdjustmentInSupabase,
   createTradeInSupabase,
   createWatchlistInSupabase,
+  deleteCapitalAdjustmentFromSupabase,
   deleteTradeFromSupabase,
   deleteWatchlistFromSupabase,
+  fetchCapitalAdjustmentsFromSupabase,
   fetchSettingsFromSupabase,
   fetchTradesFromSupabase,
   fetchWatchlistFromSupabase,
@@ -31,6 +34,17 @@ function persist<T>(key: string, value: T): void {
 
 function replaceById<T extends { id: string }>(items: T[], item: T) {
   return items.map((existing) => (existing.id === item.id ? item : existing));
+}
+
+const settingsSubscribers = new Set<(settings: Settings) => void>();
+
+/** Refresh net equity from API and notify all `useSettings` subscribers. */
+export function pullSettingsFromRemote(): Promise<void> {
+  return fetchSettingsFromSupabase().then((remoteSettings) => {
+    if (remoteSettings == null) return;
+    persist("tj_settings", remoteSettings);
+    settingsSubscribers.forEach((notify) => notify(remoteSettings));
+  });
 }
 
 export function useTrades() {
@@ -70,6 +84,7 @@ export function useTrades() {
     return updateTradeInSupabase(id, patch).then((remoteTrade) => {
       if (!remoteTrade || !mounted.current) return null;
       setTrades((previous) => replaceById(previous, remoteTrade));
+      void pullSettingsFromRemote();
       return remoteTrade;
     });
   };
@@ -139,14 +154,17 @@ export function useSettings() {
   useEffect(() => {
     mounted.current = true;
 
-    void fetchSettingsFromSupabase().then((remoteSettings) => {
-      if (!mounted.current || remoteSettings == null) return;
+    const onRemoteSettings = (remoteSettings: Settings) => {
+      if (!mounted.current) return;
       setSettings(remoteSettings);
-      persist("tj_settings", remoteSettings);
-    });
+    };
+    settingsSubscribers.add(onRemoteSettings);
+
+    void pullSettingsFromRemote();
 
     return () => {
       mounted.current = false;
+      settingsSubscribers.delete(onRemoteSettings);
     };
   }, []);
 
@@ -163,12 +181,58 @@ export function useSettings() {
     });
   };
 
-  const refreshSettings = (): Promise<void> =>
-    fetchSettingsFromSupabase().then((remoteSettings) => {
-      if (!mounted.current || remoteSettings == null) return;
-      setSettings(remoteSettings);
-      persist("tj_settings", remoteSettings);
-    });
+  const refreshSettings = (): Promise<void> => pullSettingsFromRemote();
 
   return { settings, updateSettings, refreshSettings };
+}
+
+export function useCapitalAdjustments() {
+  const [adjustments, setAdjustments] = useState<CapitalAdjustment[]>(() =>
+    load("tj_capital_adjustments", []),
+  );
+  const mounted = useRef(true);
+
+  useEffect(() => {
+    mounted.current = true;
+
+    void fetchCapitalAdjustmentsFromSupabase().then((remoteAdjustments) => {
+      if (!mounted.current || remoteAdjustments == null) return;
+      setAdjustments(remoteAdjustments);
+      persist("tj_capital_adjustments", remoteAdjustments);
+    });
+
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    persist("tj_capital_adjustments", adjustments);
+  }, [adjustments]);
+
+  const addCapitalAdjustment = async (
+    adjustment: Omit<CapitalAdjustment, "id" | "createdAt">,
+  ): Promise<CapitalAdjustment | null> => {
+    const local: CapitalAdjustment = {
+      ...adjustment,
+      id: `ca-${Date.now()}`,
+      createdAt: new Date().toISOString(),
+    };
+    setAdjustments((previous) => [local, ...previous]);
+
+    const remote = await createCapitalAdjustmentInSupabase(local);
+    if (!remote || !mounted.current) return null;
+
+    setAdjustments((previous) => [remote, ...previous.filter((item) => item.id !== local.id)]);
+    await pullSettingsFromRemote();
+    return remote;
+  };
+
+  const deleteCapitalAdjustment = async (id: string) => {
+    setAdjustments((previous) => previous.filter((item) => item.id !== id));
+    await deleteCapitalAdjustmentFromSupabase(id);
+    await pullSettingsFromRemote();
+  };
+
+  return { adjustments, addCapitalAdjustment, deleteCapitalAdjustment };
 }

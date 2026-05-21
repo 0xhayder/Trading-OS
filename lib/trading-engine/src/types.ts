@@ -43,6 +43,18 @@ export type LiquidityRiskBand = "safe" | "caution" | "dangerous";
 
 export type SlEfficiency = "structural" | "acceptable" | "poor";
 
+export type StructureBias = "bullish" | "neutral" | "bearish";
+export type TokenStructureBias = "bullish" | "ranging" | "bearish";
+export type VolatilityState = "calm" | "elevated" | "violent";
+export type BreakoutState = "clean_breakout" | "wick_breakout" | "no_breakout";
+export type ReclaimStatus = "fully_reclaimed" | "attempting_reclaim" | "lost_level";
+export type HtfLocation = "major_support" | "mid_range" | "near_resistance" | "price_discovery";
+export type LowerTfEntryStructure = "bullish" | "neutral" | "weak";
+export type VolumeState = "weak" | "normal" | "expansion" | "extreme_expansion";
+export type PostBreakoutBehavior = "immediate_continuation" | "holding" | "stalling" | "failing";
+export type MoveSlRule = "never" | "after_tp1" | "after_structure_shift" | "manual";
+export type InvalidationType = "structure_loss" | "support_loss" | "volume_failure" | "btc_weakness";
+
 /** Post–multi-layer pipeline trade buckets */
 export type TradeClassification =
   | "reject"
@@ -65,6 +77,41 @@ export interface RrEngineOutput {
 
 /** Full discretionary → quantified input */
 export interface EngineTradeInput {
+  identity?: {
+    coin?: string;
+    narrativeCategory?: string;
+    marketCapTier?: "small_cap" | "mid_cap" | "large_cap";
+  };
+  observableMarket?: {
+    btcTrend?: TrendScoreLabel;
+    altTrend?: TrendScoreLabel;
+    btcVolatilityState: VolatilityState;
+    narrativeHeat: "dead" | "weak" | "active" | "hot" | "euphoric";
+    /** @deprecated Legacy journal rows */
+    btcHigherTfStructure?: StructureBias;
+    btcMidTfStructure?: StructureBias;
+    altHigherTfStructure?: StructureBias;
+    altMidTfStructure?: StructureBias;
+  };
+  observableStructure?: {
+    tokenHigherTfStructure: TokenStructureBias;
+    tokenMidTfStructure: TokenStructureBias;
+    tokenLowerTfStructure: TokenStructureBias;
+    /** @deprecated Legacy journal rows */
+    breakoutState?: BreakoutState;
+    reclaimStatus?: ReclaimStatus;
+    htfLocation?: HtfLocation;
+    lowerTfEntryStructure?: LowerTfEntryStructure;
+  };
+  observableMomentum?: {
+    volumeState: VolumeState;
+    relativeVolume: "below_average" | "average" | "high" | "extreme";
+    postBreakoutBehavior: PostBreakoutBehavior;
+  };
+  managementPlan?: {
+    moveSlRule: MoveSlRule;
+    invalidationType: InvalidationType;
+  };
   market: {
     btcTrend: TrendScoreLabel;
     altTrend: TrendScoreLabel;
@@ -101,6 +148,10 @@ export interface EngineTradeInput {
     stopLossPct: number;
     tp1Pct: number;
     tp2Pct: number;
+    tp3Pct?: number;
+    tp1PositionPct?: number;
+    tp2PositionPct?: number;
+    tp3PositionPct?: number;
   };
 }
 

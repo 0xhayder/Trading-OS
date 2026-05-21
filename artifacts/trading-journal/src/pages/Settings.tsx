@@ -1,5 +1,6 @@
-import { useState } from "react";
-import { useSettings } from "@/lib/store";
+import { useEffect, useMemo, useState } from "react";
+import { computeAccountEquitySnapshot } from "@/lib/portfolioMetrics";
+import { useCapitalAdjustments, useSettings, useTrades } from "@/lib/store";
 import { 
   DollarSign, 
   Info, 
@@ -13,8 +14,10 @@ import {
   XCircle,
   Ban,
   Settings as SettingsIcon,
-  Crosshair
+  Crosshair,
+  Trash2
 } from "lucide-react";
+import CapitalSummary from "@/components/CapitalSummary";
 
 const CLASSIFICATIONS = [
   { range: "0–44", label: "Reject Trade", note: "Score band only — engine may still label HARD REJECT on veto rules." },
@@ -72,66 +75,177 @@ const GUARDRAILS = [
   "Final score is not a simple average of the five layer bars. It is the post‑filter execution score.",
   "Allocation uses a curve, not a straight line from score to percent.",
   "Higher planned size asks for a lower minimum RR; tiny size asks for a higher RR floor.",
-  "Capital field here is only for turning percent bands into dollar hints — it does not change engine math.",
+  "Net capital (top right) is used for percent-to-dollar sizing hints — it does not change engine score math.",
 ];
 
 export default function Settings() {
   const { settings, updateSettings } = useSettings();
-  const [capital, setCapital] = useState(String(settings.totalCapital));
+  const { trades } = useTrades();
+  const { adjustments, addCapitalAdjustment, deleteCapitalAdjustment } = useCapitalAdjustments();
+  const [capital, setCapital] = useState("");
+  const [adjustAmount, setAdjustAmount] = useState("");
+  const [adjustNote, setAdjustNote] = useState("");
   const [saved, setSaved] = useState(false);
 
+  const equity = useMemo(() => {
+    const closed = trades.filter((t) => t.outcome && t.actualPnlPct != null);
+    return computeAccountEquitySnapshot(settings.totalCapital, closed, adjustments);
+  }, [settings.totalCapital, trades, adjustments]);
+
+  useEffect(() => {
+    setCapital(String(equity.baseEquityUsd));
+  }, [equity.baseEquityUsd]);
+
   const handleSave = () => {
-    const val = parseFloat(capital);
-    if (!isNaN(val) && val > 0) {
-      updateSettings({ totalCapital: val });
+    const baseUsd = parseFloat(capital);
+    if (!isNaN(baseUsd) && baseUsd > 0) {
+      updateSettings({ totalCapital: baseUsd });
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     }
   };
 
+  const handleAdjustment = (adjustmentType: "add" | "withdraw") => {
+    const amountUsd = parseFloat(adjustAmount);
+    if (!Number.isFinite(amountUsd) || amountUsd <= 0) return;
+    void addCapitalAdjustment({ adjustmentType, amountUsd, note: adjustNote || undefined }).then(() => {
+      setAdjustAmount("");
+      setAdjustNote("");
+    });
+  };
+
   return (
     <div className="p-6 space-y-8 pb-12">
-      <div className="flex items-center gap-3 border-b border-border pb-4">
-        <div className="p-2 bg-muted rounded-md">
-          <SettingsIcon className="w-5 h-5 text-foreground" />
+      <div className="flex items-center justify-between border-b border-border pb-4">
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-muted rounded-md">
+            <SettingsIcon className="w-5 h-5 text-foreground" />
+          </div>
+          <div>
+            <h1 className="text-base font-semibold">Settings & Reference</h1>
+            <p className="text-xs text-muted-foreground mt-0.5">Configure capital and review engine logic</p>
+          </div>
         </div>
-        <div>
-          <h1 className="text-base font-semibold">Settings & Reference</h1>
-          <p className="text-xs text-muted-foreground mt-0.5">Configure capital and review engine logic</p>
-        </div>
+        <CapitalSummary />
       </div>
 
-      <div className="border border-border/60 rounded-xl bg-card/20 p-6 space-y-6 shadow-sm relative overflow-hidden">
-        {/* Subtle accent line */}
-        <div className="absolute top-0 left-0 w-1 h-full bg-foreground/20"></div>
-        
-        <div className="pl-2">
-          <div className="text-sm font-semibold mb-3 flex items-center gap-2">
-            Base Account Capital
-          </div>
-          <div className="relative max-w-2xl">
-            <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-              <DollarSign className="w-4 h-4 text-muted-foreground" />
-            </div>
-            <input
-              type="number"
-              min="1"
-              step="100"
-              className="w-full bg-background border border-border rounded-lg pl-10 pr-4 py-2.5 text-sm font-mono text-foreground focus:outline-none focus:ring-1 focus:ring-ring focus:border-ring transition-shadow shadow-sm"
-              value={capital}
-              onChange={(e) => setCapital(e.target.value)}
-            />
-          </div>
-          <div className="text-xs text-muted-foreground mt-3 leading-relaxed flex items-start gap-2 max-w-2xl">
-            <Info className="w-4 h-4 shrink-0 mt-0.5 opacity-70" />
-            <span>Used to turn engine percent bands into dollar ranges on the decision screen and journal. It does not change how the engine scores the setup.</span>
-          </div>
-        </div>
+      <div className="border border-border/60 rounded-xl bg-card/20 p-4 shadow-sm relative overflow-hidden w-full">
+        <div className="absolute top-0 left-0 w-1 h-full bg-foreground/20" />
 
-        <div className="pl-2">
+        <div className="pl-2 space-y-4 w-full min-w-0">
+          <div className="flex flex-col xl:flex-row xl:items-end gap-3 w-full">
+            <div className="shrink-0 w-full sm:w-40">
+              <div className="text-xs font-semibold mb-1.5">Base Account Capital</div>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none">
+                  <DollarSign className="w-3.5 h-3.5 text-muted-foreground" />
+                </div>
+                <input
+                  type="number"
+                  min="1"
+                  step="100"
+                  className="w-full bg-background border border-border rounded-md pl-8 pr-2 py-2 text-sm font-mono text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                  value={capital}
+                  onChange={(e) => setCapital(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div className="flex-1 min-w-0 space-y-1.5">
+              <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Capital adjustments
+              </div>
+              <div className="flex flex-col sm:flex-row gap-2 w-full">
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  className="sm:w-28 shrink-0 bg-background border border-border rounded-md px-2.5 py-2 text-sm font-mono text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                  placeholder="Amount"
+                  value={adjustAmount}
+                  onChange={(e) => setAdjustAmount(e.target.value)}
+                />
+                <input
+                  className="flex-1 min-w-0 bg-background border border-border rounded-md px-2.5 py-2 text-sm font-mono text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                  placeholder="Note (optional)"
+                  value={adjustNote}
+                  onChange={(e) => setAdjustNote(e.target.value)}
+                />
+                <button
+                  type="button"
+                  className="shrink-0 px-3 py-2 text-xs font-mono bg-foreground text-background rounded-md hover:opacity-90 whitespace-nowrap"
+                  onClick={() => handleAdjustment("add")}
+                >
+                  Add
+                </button>
+                <button
+                  type="button"
+                  className="shrink-0 px-3 py-2 text-xs font-mono border border-border rounded-md text-muted-foreground hover:text-foreground whitespace-nowrap"
+                  onClick={() => handleAdjustment("withdraw")}
+                >
+                  Withdraw
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="text-[11px] text-muted-foreground leading-relaxed flex items-start gap-2">
+            <Info className="w-3.5 h-3.5 shrink-0 mt-0.5 opacity-70" />
+            <span>
+              Base equity drives account return and sizing hints. Deposits and withdrawals update net capital (top right).
+              Trading P&L is tracked separately and also flows into net capital when trades close.
+            </span>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs font-mono">
+            <div className="border border-border rounded-sm px-2.5 py-2">
+              <div className="text-[10px] uppercase text-muted-foreground mb-0.5">Net capital</div>
+              <div className="text-foreground">${equity.netEquityUsd.toLocaleString()}</div>
+            </div>
+            <div className="border border-border rounded-sm px-2.5 py-2">
+              <div className="text-[10px] uppercase text-muted-foreground mb-0.5">Trading P&L</div>
+              <div className={equity.tradingPnlUsd >= 0 ? "text-green-400" : "text-red-400"}>
+                {equity.tradingPnlUsd >= 0 ? "+" : "−"}${Math.abs(equity.tradingPnlUsd).toLocaleString()}
+              </div>
+            </div>
+            <div className="border border-border rounded-sm px-2.5 py-2">
+              <div className="text-[10px] uppercase text-muted-foreground mb-0.5">Deposits</div>
+              <div className="text-green-400/90">+${equity.depositsUsd.toLocaleString()}</div>
+            </div>
+            <div className="border border-border rounded-sm px-2.5 py-2">
+              <div className="text-[10px] uppercase text-muted-foreground mb-0.5">Withdrawals</div>
+              <div className="text-red-400/90">−${equity.withdrawalsUsd.toLocaleString()}</div>
+            </div>
+          </div>
+
+          <div className="divide-y divide-border border border-border rounded-sm w-full">
+            {adjustments.slice(0, 6).map((adjustment) => (
+              <div key={adjustment.id} className="flex items-center justify-between gap-3 px-3 py-1.5 text-xs font-mono">
+                <span className={adjustment.adjustmentType === "add" ? "text-green-400" : "text-red-400"}>
+                  {adjustment.adjustmentType === "add" ? "+" : "-"}${adjustment.amountUsd.toFixed(2)}
+                </span>
+                <span className="text-muted-foreground flex-1 truncate">{adjustment.note || "Capital adjustment"}</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-muted-foreground shrink-0">{new Date(adjustment.createdAt).toLocaleDateString()}</span>
+                  <button
+                    type="button"
+                    className="text-muted-foreground hover:text-red-400 transition-colors p-1"
+                    title="Delete adjustment"
+                    onClick={() => deleteCapitalAdjustment(adjustment.id)}
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                </div>
+              </div>
+            ))}
+            {adjustments.length === 0 && (
+              <div className="px-3 py-3 text-xs text-muted-foreground text-center">No capital adjustments yet.</div>
+            )}
+          </div>
+
           <button
             type="button"
-            className="w-full max-w-2xl py-2.5 text-sm font-mono font-medium bg-foreground text-background rounded-lg hover:bg-foreground/90 transition-all active:scale-[0.98] shadow-sm flex items-center justify-center gap-2"
+            className="w-full py-2 text-sm font-mono font-medium bg-foreground text-background rounded-md hover:bg-foreground/90 transition-all active:scale-[0.98] flex items-center justify-center"
             onClick={handleSave}
           >
             {saved ? "Saved ✓" : "Save Configuration"}

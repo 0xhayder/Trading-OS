@@ -32,10 +32,10 @@ function buildReasoningSummary(params: {
 }): string {
   const parts: string[] = [];
   if (params.hardRejected) {
-    parts.push("Hard filter veto — trade blocked before conditional scoring.");
+    parts.push("Rejected by hard filter.");
     return parts.join(" ");
   }
-  parts.push(`Final score ${params.finalScore} → ${params.classification.replace(/_/g, " ")}.`);
+  parts.push(`Final score ${params.finalScore}: ${params.classification.replace(/_/g, " ")}.`);
   if (params.mod.conditionalTrace.length) {
     parts.push(`Conditionals: ${params.mod.conditionalTrace.join(" ")}`);
   }
@@ -201,11 +201,11 @@ export function scoreEngineTrade(input: EngineTradeInput, user: UserRiskSettings
 
   const reason = !deployable
     ? classification === "reject"
-      ? "Formal rejection band — no deployment."
-      : "Watchlist / observation — no capital commitment until score improves."
+      ? "Rejected: no deployment."
+      : "Watchlist only: wait for cleaner conditions."
     : rrOk
-      ? "Meets minimum asymmetry and regime checks for scaled deployment."
-      : "Deployable setup with RR below ideal floor — trade is approved, but reduce size or wait for better location.";
+      ? "Approved: market, structure, and RR are acceptable."
+      : "Approved with caution: RR is below ideal floor.";
 
   const factorRows = mod.layers.flatMap((l) => l.factors);
   const layerScores100 = Object.fromEntries(mod.layers.map((l) => [l.layer, l.score100])) as EngineScoreResult["layerScores100"];

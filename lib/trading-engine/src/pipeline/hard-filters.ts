@@ -36,7 +36,26 @@ export function runHardFilterEngine(input: EngineTradeInput): HardFilterOutcome 
     traces.push({
       ruleId: "H1",
       action: "reject",
-      detail: "Broad bearish regime with breakout retest — statistical failure cluster.",
+      detail: "Rejected: breakout setup against bearish market conditions.",
+    });
+    return finish();
+  }
+
+  const tokenLowerBearish = input.observableStructure?.tokenLowerTfStructure === "bearish";
+  const tokenMidRangingLowerBearish =
+    input.observableStructure?.tokenMidTfStructure === "ranging" && tokenLowerBearish;
+  if (
+    input.observableMarket?.btcVolatilityState === "violent" &&
+    btcBear &&
+    (breakout ||
+      input.observableStructure?.breakoutState === "wick_breakout" ||
+      tokenMidRangingLowerBearish)
+  ) {
+    rejected = true;
+    traces.push({
+      ruleId: "H1B",
+      action: "reject",
+      detail: "Rejected: violent bearish BTC makes breakout execution unsafe.",
     });
     return finish();
   }
@@ -47,7 +66,17 @@ export function runHardFilterEngine(input: EngineTradeInput): HardFilterOutcome 
     traces.push({
       ruleId: "H2",
       action: "reject",
-      detail: "Weak retest with messy / forced structure — no structural edge.",
+      detail: "Rejected: weak confirmation and unclear structure.",
+    });
+    return finish();
+  }
+
+  if (input.observableStructure?.reclaimStatus === "lost_level" || tokenLowerBearish) {
+    rejected = true;
+    traces.push({
+      ruleId: "H2B",
+      action: "reject",
+      detail: "Rejected: key level is lost.",
     });
     return finish();
   }
@@ -59,7 +88,7 @@ export function runHardFilterEngine(input: EngineTradeInput): HardFilterOutcome 
     traces.push({
       ruleId: "H3",
       action: "reject",
-      detail: "Dangerous liquidity with euphoric extension — liquidation / gap risk.",
+      detail: "Rejected: dangerous liquidity with euphoric extension.",
     });
     return finish();
   }
@@ -71,7 +100,7 @@ export function runHardFilterEngine(input: EngineTradeInput): HardFilterOutcome 
     traces.push({
       ruleId: "H4",
       action: "reject",
-      detail: "Limited room to resistance with poor RR — asymmetry breaks down.",
+      detail: "Rejected: poor RR into nearby resistance.",
     });
     return finish();
   }
@@ -82,7 +111,7 @@ export function runHardFilterEngine(input: EngineTradeInput): HardFilterOutcome 
     traces.push({
       ruleId: "H5",
       action: "watchlist_only",
-      detail: "High event risk with weak momentum — observation only.",
+      detail: "Watchlist only: high event risk and weak momentum.",
     });
   }
 
@@ -95,7 +124,17 @@ export function runHardFilterEngine(input: EngineTradeInput): HardFilterOutcome 
     traces.push({
       ruleId: "H6",
       action: "cap_classification",
-      detail: "Neutral BTC, bearish alts, dead narrative — aggressive profiles disabled.",
+      detail: "Aggressive sizing disabled: neutral BTC, bearish alts, dead narrative.",
+    });
+  }
+
+  if (input.observableMarket?.btcVolatilityState === "violent") {
+    aggressionCeiling = "cautious";
+    allocationCapPct = 12;
+    traces.push({
+      ruleId: "H7",
+      action: "compress",
+      detail: "Cautious only: BTC volatility is violent.",
     });
   }
 

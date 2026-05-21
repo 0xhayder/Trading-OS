@@ -1,21 +1,54 @@
 import type { DecisionPresentation } from "@workspace/trading-engine";
 
 export type SetupType = "Breakout Retest" | "Double Bottom" | "Trendline Reclaim" | "Trend Continuation";
-export type Timeframe = "4H" | "Daily" | "Weekly";
-export type MarketCondition = "Strong Bullish" | "Bullish" | "Neutral" | "Bearish" | "Strong Bearish";
-export type NarrativeStrength = "Hot" | "Active" | "Neutral" | "Weak" | "Dead";
-export type LevelClarity = "Extremely Obvious" | "Clean" | "Medium" | "Forced / Messy";
-export type TfAlignment = "Fully Aligned" | "Partially Aligned" | "Counter Trend";
-export type RetestQuality = "Strong" | "Decent" | "Weak" | "None";
-export type VolumeStrength = "Strong Expansion" | "Normal" | "Weak";
-export type CandleImpulse = "Explosive" | "Strong" | "Weak";
-export type FollowThrough = "Continuation Present" | "Slowing" | "Failing";
-export type EntryDistance = "Perfect" | "Decent" | "Chased";
-export type SpaceToResistance = "Large Space" | "Decent Space" | "Limited Space";
-export type RRQuality = "RR > 5" | "RR 3 to 5" | "RR 2 to 3" | "RR < 2";
+export type NarrativeCategory = "AI" | "DeFi" | "Gaming" | "Meme" | "Layer 1" | "Layer 2" | "RWA" | "Other";
+export type MarketCapTier = "Small Cap" | "Mid Cap" | "Large Cap";
+/** Five-point BTC / alts regime trend */
+export type MarketTrend =
+  | "Extreme Bullish"
+  | "Bullish"
+  | "Neutral"
+  | "Bearish"
+  | "Extreme Bearish";
+/** Token market structure on a single timeframe */
+export type TokenMarketStructure = "Bullish" | "Ranging" | "Bearish";
+export type BtcVolatilityState = "Calm" | "Elevated" | "Violent";
+export type NarrativeHeat = "Dead" | "Weak" | "Active" | "Hot" | "Euphoric";
+/** @deprecated Legacy rows only */
+export type StructureBias = "Bullish" | "Neutral" | "Bearish";
+/** @deprecated Legacy rows only */
+export type BreakoutState = "Clean Breakout" | "Wick Breakout" | "No Breakout";
+/** @deprecated Legacy rows only */
+export type ReclaimStatus = "Fully Reclaimed" | "Attempting Reclaim" | "Lost Level";
+/** @deprecated Legacy rows only */
+export type HtfLocation = "At Major Support" | "Mid Range" | "Near Resistance" | "Price Discovery";
+/** @deprecated Legacy rows only */
+export type LowerTfEntryStructure = "Bullish" | "Neutral" | "Weak";
+export type VolumeState = "Weak" | "Normal" | "Expansion" | "Extreme Expansion";
+export type RelativeVolume = "Below Average" | "Average" | "High" | "Extreme";
+export type PostBreakoutBehavior = "Immediate Continuation" | "Holding" | "Stalling" | "Failing";
+export type EntryLocation = "At Key Level" | "Slightly Extended" | "Chased";
 export type Overextension = "Calm" | "Extended" | "Euphoric";
 export type EventRisk = "Low" | "Medium" | "High";
-export type LiquidityRisk = "High Liquidity" | "Acceptable" | "Dangerous";
+export type LiquidityStability = "Stable" | "Moderate" | "Thin" | "Dangerous";
+export type MoveSlRule = "Never" | "After TP1" | "After Structure Shift" | "Manual";
+export type InvalidationType = "Structure Loss" | "Support Loss" | "Volume Failure" | "BTC Weakness";
+export type PrimaryMistakeTag =
+  | "Early Entry"
+  | "Chased Entry"
+  | "No Confirmation"
+  | "Ignored Higher TF Trend"
+  | "Emotional Exit"
+  | "Revenge Trade"
+  | "Forced Setup"
+  | "Poor RR"
+  | "Ignored BTC Weakness"
+  | "Ignored Volume Weakness"
+  | "Moved SL Emotionally"
+  | "Oversized Position"
+  | "FOMO Entry"
+  | "No Clear Structure"
+  | "Overtrading";
 
 export type TradeStatus =
   | "Reject Trade"
@@ -32,26 +65,66 @@ export type TradeOutcome = "win" | "loss" | "breakeven";
 export interface TradeInput {
   coin: string;
   setupType: SetupType;
-  timeframe: Timeframe;
-  btcCondition: MarketCondition;
-  altCondition: MarketCondition;
-  narrativeStrength: NarrativeStrength;
-  levelClarity: LevelClarity;
-  timeframeAlignment: TfAlignment;
-  retestQuality: RetestQuality;
-  volumeStrength: VolumeStrength;
-  candleImpulse: CandleImpulse;
-  followThrough: FollowThrough;
+  narrativeCategory: NarrativeCategory;
+  marketCapTier: MarketCapTier;
+  btcTrend: MarketTrend;
+  altTrend: MarketTrend;
+  btcVolatilityState: BtcVolatilityState;
+  narrativeHeat: NarrativeHeat;
+  tokenHigherTfStructure: TokenMarketStructure;
+  tokenMidTfStructure: TokenMarketStructure;
+  tokenLowerTfStructure: TokenMarketStructure;
+  volumeState: VolumeState;
+  relativeVolume: RelativeVolume;
+  postBreakoutBehavior: PostBreakoutBehavior;
+  /** @deprecated Legacy rows only */
+  entryPrice?: number;
+  /** @deprecated Legacy rows only */
+  stopLossPrice?: number;
+  /** @deprecated Legacy rows only */
+  tp1Price?: number;
+  /** @deprecated Legacy rows only */
+  tp2Price?: number;
+  /** @deprecated Legacy rows only */
+  tp3Price?: number;
   stopLossPct: number;
-  tp1Pct: number;
-  tp2Pct: number;
-  entryDistance: EntryDistance;
-  spaceToResistance: SpaceToResistance;
-  rrQuality: RRQuality;
+  tp1Pct?: number;
+  tp2Pct?: number;
+  tp3Pct?: number;
+  tp1PositionPct: number;
+  tp2PositionPct: number;
+  tp3PositionPct: number;
+  entryLocation: EntryLocation;
   overextension: Overextension;
   eventRisk: EventRisk;
-  liquidityRisk: LiquidityRisk;
+  liquidityStability: LiquidityStability;
+  moveSlRule: MoveSlRule;
+  invalidationType: InvalidationType;
   notes: string;
+
+  /** Legacy fields kept optional so older saved rows remain renderable. */
+  btcHigherTfStructure?: StructureBias;
+  btcMidTfStructure?: StructureBias;
+  altHigherTfStructure?: StructureBias;
+  altMidTfStructure?: StructureBias;
+  breakoutState?: BreakoutState;
+  reclaimStatus?: ReclaimStatus;
+  htfLocation?: HtfLocation;
+  lowerTfEntryStructure?: LowerTfEntryStructure;
+  timeframe?: string;
+  btcCondition?: string;
+  altCondition?: string;
+  narrativeStrength?: string;
+  levelClarity?: string;
+  timeframeAlignment?: string;
+  retestQuality?: string;
+  volumeStrength?: string;
+  candleImpulse?: string;
+  followThrough?: string;
+  entryDistance?: string;
+  spaceToResistance?: string;
+  rrQuality?: string;
+  liquidityRisk?: string;
 }
 
 export interface ScoreResult {
@@ -72,11 +145,16 @@ export interface ScoreResult {
 export interface Trade extends TradeInput, ScoreResult {
   id: string;
   createdAt: string;
+  closedAt?: string;
   allocatedAmountUsd?: number;
   realizedPnlUsd?: number;
   outcome?: TradeOutcome;
   actualPnlPct?: number;
-  mistakeTags?: string;
+  mistakeTags?: PrimaryMistakeTag[];
+  mistakeNote?: string;
+  closeNotes?: string;
+  managementNotes?: string;
+  executionAnalysis?: string;
 }
 
 export interface WatchlistTrade extends TradeInput, ScoreResult {
@@ -88,4 +166,14 @@ export interface WatchlistTrade extends TradeInput, ScoreResult {
 
 export interface Settings {
   totalCapital: number;
+}
+
+export type CapitalAdjustmentType = "add" | "withdraw";
+
+export interface CapitalAdjustment {
+  id: string;
+  adjustmentType: CapitalAdjustmentType;
+  amountUsd: number;
+  note?: string;
+  createdAt: string;
 }

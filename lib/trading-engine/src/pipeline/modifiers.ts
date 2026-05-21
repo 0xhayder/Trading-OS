@@ -34,7 +34,7 @@ export function applyConditionalAndSynergy(
   const altBull = isBullishTrend(input.market.altTrend);
   if (btcBull && altBull) {
     lw = applyMomentumWeightBoost(lw, 1.2);
-    conditionalTrace.push("C1: Dual-bull regime — momentum weight +20% (renormalized).");
+    conditionalTrace.push("Market conditions aligned.");
   }
 
   let working = layers.map((l) => ({ ...l }));
@@ -58,13 +58,13 @@ export function applyConditionalAndSynergy(
     struct
   ) {
     patchLayer("structure", struct.score100 * 1.15);
-    conditionalTrace.push("C3: Strong retest + obvious level — structure score +15%.");
+    conditionalTrace.push("Clean level and confirmation improved structure quality.");
   }
 
   const ent = working.find((l) => l.layer === "entry");
   if (input.entry.entryEfficiency === "chased" && ent) {
     patchLayer("entry", ent.score100 * 0.7);
-    conditionalTrace.push("C4: Extended / chased entry — entry score −30%.");
+    conditionalTrace.push("Chased entry reduced execution quality.");
   }
 
   working = refreshLayerWeighted(working, lw);
@@ -72,7 +72,13 @@ export function applyConditionalAndSynergy(
   const mom = working.find((l) => l.layer === "momentum");
   if (input.risk.overextension === "euphoric" && mom) {
     patchLayer("momentum", mom.score100 * 0.6);
-    conditionalTrace.push("C5: Euphoric extension — momentum contribution −40%.");
+    conditionalTrace.push("Euphoric extension reduced usable momentum.");
+  }
+
+  const riskLayer = working.find((l) => l.layer === "risk");
+  if (input.observableMarket?.btcVolatilityState === "violent" && riskLayer) {
+    patchLayer("risk", riskLayer.score100 * 0.55);
+    conditionalTrace.push("Violent BTC volatility compressed risk quality.");
   }
 
   working = refreshLayerWeighted(working, lw);
@@ -84,7 +90,7 @@ export function applyConditionalAndSynergy(
     isCandleStrong(input.momentum.candleStrength)
   ) {
     finalScore = clamp(finalScore * 1.12, 0, 100);
-    conditionalTrace.push("C2: Hot narrative + strong volume + strong candle — composite +12%.");
+    conditionalTrace.push("Narrative and volume confirmed the move.");
   }
 
   const positiveSynergies: string[] = [];
@@ -127,6 +133,20 @@ export function applyConditionalAndSynergy(
     positiveSynergies.push("S3");
   }
 
+  const tokenAligned =
+    input.observableStructure?.tokenHigherTfStructure === "bullish" &&
+    input.observableStructure?.tokenMidTfStructure === "bullish" &&
+    input.observableStructure?.tokenLowerTfStructure === "bullish";
+  const legacyAligned =
+    input.observableStructure?.breakoutState === "clean_breakout" &&
+    input.observableStructure?.reclaimStatus === "fully_reclaimed";
+  const s4 =
+    (tokenAligned || legacyAligned) && input.observableMomentum?.postBreakoutBehavior === "holding";
+  if (s4) {
+    finalScore = clamp(finalScore * 1.08, 0, 100);
+    positiveSynergies.push("S4");
+  }
+
   const negativeSynergies: string[] = [];
 
   const n1 =
@@ -148,7 +168,17 @@ export function applyConditionalAndSynergy(
     isMomentumWeak(input.momentum) &&
     input.entry.distanceToResistance === "nearby";
   if (n3) {
+    finalScore = clamp(finalScore * 0.72, 0, 100);
     negativeSynergies.push("N3");
+  }
+
+  const n4 =
+    input.observableMarket?.btcVolatilityState === "violent" &&
+    input.market.btcTrend !== "strong_bullish";
+  if (n4) {
+    finalScore = clamp(finalScore * 0.82, 0, 100);
+    allocationCeilingMultiplier *= 0.65;
+    negativeSynergies.push("N4");
   }
 
   return {

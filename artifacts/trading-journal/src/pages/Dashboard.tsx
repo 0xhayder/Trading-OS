@@ -1,42 +1,26 @@
 import { Link } from "wouter";
-import { useTrades } from "@/lib/store";
-import { useSettings } from "@/lib/store";
+import { useCapitalAdjustments, useSettings, useTrades } from "@/lib/store";
+import CapitalSummary from "@/components/CapitalSummary";
 import {
+  accountReturnPct,
   buildEquityCurveUsd,
+  buildTradingReturnPctCurve,
   initialCapitalUsd,
   isBreakevenClosed,
   isLosingClosed,
   isWinningClosed,
+  totalCapitalAdjustmentsUsd,
   totalRealizedUsd,
-  totalReturnPct,
+  totalTradingReturnPct,
 } from "@/lib/portfolioMetrics";
-import { AreaChart, Area, XAxis, YAxis, ResponsiveContainer, Tooltip } from "recharts";
+import { PerformanceAreaChart } from "@/components/PerformanceAreaChart";
+import { StatCard } from "@/components/StatCard";
 import { formatTradeDateTime } from "@/lib/formatDates";
-
-const TT = {
-  contentStyle: {
-    background: "hsl(0 0% 8%)",
-    border: "1px solid hsl(0 0% 14%)",
-    borderRadius: "2px",
-    fontSize: "11px",
-    fontFamily: "var(--app-font-mono)",
-  },
-  labelStyle: { color: "hsl(0 0% 45%)" },
-  itemStyle: { color: "hsl(0 0% 80%)" },
-};
-
-function Stat({ label, value, color }: { label: string; value: string; color?: string }) {
-  return (
-    <div className="border border-border p-4 rounded-sm">
-      <div className="section-label mb-2">{label}</div>
-      <div className={`font-mono text-xl font-semibold ${color ?? "text-foreground"}`}>{value}</div>
-    </div>
-  );
-}
 
 export default function Dashboard() {
   const { trades } = useTrades();
   const { settings } = useSettings();
+  const { adjustments } = useCapitalAdjustments();
 
   const closed = trades.filter((t) => t.outcome && t.actualPnlPct != null);
   const open = trades.filter((t) => !t.outcome);
@@ -44,15 +28,18 @@ export default function Dashboard() {
   const losses = closed.filter(isLosingClosed);
   const breakevens = closed.filter(isBreakevenClosed);
   const totalPnlUsd = totalRealizedUsd(closed);
-  const initialUsd = initialCapitalUsd(settings.totalCapital, totalPnlUsd);
-  const totalPnl = totalReturnPct(initialUsd, totalPnlUsd);
+  const adjustmentsUsd = totalCapitalAdjustmentsUsd(adjustments);
+  const equityStartUsd = initialCapitalUsd(settings.totalCapital, totalPnlUsd, adjustmentsUsd);
+  const accountReturn = accountReturnPct(equityStartUsd, totalPnlUsd);
+  const tradingReturn = totalTradingReturnPct(closed);
   const decided = wins.length + losses.length;
   const winRate = decided > 0 ? (wins.length / decided) * 100 : 0;
 
   const closedChrono = [...closed].sort(
-    (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+    (a, b) => new Date(a.closedAt ?? a.createdAt).getTime() - new Date(b.closedAt ?? b.createdAt).getTime(),
   );
-  const equityCurve = buildEquityCurveUsd(closedChrono, initialUsd);
+  const tradingEquityCurve = buildEquityCurveUsd(closedChrono, equityStartUsd);
+  const tradingReturnCurve = buildTradingReturnPctCurve(closedChrono);
 
   const recent = [...trades]
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
@@ -69,72 +56,90 @@ export default function Dashboard() {
     "Reject Trade": "text-red-400",
   };
 
+  const pctColor = (v: number) => (v > 0 ? "text-green-400" : v < 0 ? "text-red-400" : undefined);
+  const closedLabel = `${wins.length}W/${losses.length}L${breakevens.length ? `/${breakevens.length}BE` : ""}/${open.length}O`;
+
+  const chartHeight = 240;
+
   return (
-    <div className="p-6 space-y-5">
+    <div className="p-6 space-y-6 w-full min-w-0">
       <div className="flex items-center justify-between">
         <h1 className="text-sm font-semibold">Dashboard</h1>
-        <span className="font-mono text-xs text-muted-foreground">
-          Capital: ${settings.totalCapital.toLocaleString()}
-        </span>
+        <CapitalSummary />
       </div>
 
-      <div className="grid grid-cols-5 gap-3">
-        <Stat
-          label="Account return"
-          value={`${totalPnl >= 0 ? "+" : ""}${totalPnl.toFixed(2)}%`}
-          color={totalPnl > 0 ? "text-green-400" : totalPnl < 0 ? "text-red-400" : undefined}
+      <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3">
+        <StatCard
+          size="md"
+          label="Account Return"
+          value={`${accountReturn >= 0 ? "+" : ""}${accountReturn.toFixed(2)}%`}
+          color={pctColor(accountReturn)}
         />
-        <Stat
-          label="Total PnL (USD)"
+        <StatCard
+          size="md"
+          label="Total PnL"
           value={`${totalPnlUsd >= 0 ? "+" : ""}$${totalPnlUsd.toFixed(2)}`}
-          color={totalPnlUsd > 0 ? "text-green-400" : totalPnlUsd < 0 ? "text-red-400" : undefined}
+          color={pctColor(totalPnlUsd)}
         />
-        <Stat
+        <StatCard
+          size="md"
+          label="Trading Return"
+          value={`${tradingReturn >= 0 ? "+" : ""}${tradingReturn.toFixed(2)}%`}
+          color={pctColor(tradingReturn)}
+        />
+        <StatCard
+          size="md"
           label="Win Rate"
           value={`${winRate.toFixed(1)}%`}
           color={winRate >= 50 ? "text-green-400" : closed.length > 0 ? "text-red-400" : undefined}
         />
-        <Stat
-          label="Closed"
-          value={`${wins.length}W / ${losses.length}L${breakevens.length ? ` / ${breakevens.length}BE` : ""}`}
-        />
-        <Stat label="Open" value={String(open.length)} />
+        <StatCard size="md" label="Closed / Open" value={closedLabel} />
       </div>
 
-      <div className="border border-border rounded-sm p-4">
-        <div className="section-label mb-4">Equity curve (USD)</div>
-        {closed.length > 0 ? (
-          <ResponsiveContainer width="100%" height={160}>
-            <AreaChart data={equityCurve} margin={{ top: 4, right: 8, left: 4, bottom: 0 }}>
-              <defs>
-                <linearGradient id="eg" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="hsl(0 0% 70%)" stopOpacity={0.1} />
-                  <stop offset="95%" stopColor="hsl(0 0% 70%)" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <XAxis dataKey="date" tick={{ fontSize: 10, fill: "hsl(0 0% 35%)", fontFamily: "var(--app-font-mono)" }} axisLine={false} tickLine={false} />
-              <YAxis
-                tick={{ fontSize: 10, fill: "hsl(0 0% 35%)", fontFamily: "var(--app-font-mono)" }}
-                axisLine={false}
-                tickLine={false}
-                tickFormatter={(v) => `$${Number(v).toLocaleString()}`}
-              />
-              <Tooltip
-                {...TT}
-                formatter={(v: number) => [`$${Number(v).toFixed(2)}`, "Equity"]}
-              />
-              <Area type="monotone" dataKey="equityUsd" stroke="hsl(0 0% 70%)" strokeWidth={1.5} fill="url(#eg)" dot={false} />
-            </AreaChart>
-          </ResponsiveContainer>
-        ) : (
-          <div className="h-40 flex items-center justify-center text-xs text-muted-foreground">
-            Close trades to build the equity curve
-          </div>
-        )}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-5 pt-2">
+        <div className="border border-border rounded-sm p-4 min-w-0">
+          <div className="section-label mb-3">Trading equity curve</div>
+          {tradingEquityCurve.length > 1 ? (
+            <PerformanceAreaChart
+              data={tradingEquityCurve}
+              dataKey="equityUsd"
+              height={chartHeight}
+              yTickFormatter={(v) => `$${Number(v).toLocaleString(undefined, { maximumFractionDigits: 0 })}`}
+              tooltipFormatter={(v) => [`$${Number(v).toFixed(2)}`, "Equity"]}
+            />
+          ) : (
+            <div
+              className="flex items-center justify-center text-xs text-muted-foreground"
+              style={{ height: chartHeight }}
+            >
+              Close trades to build trading equity
+            </div>
+          )}
+        </div>
+
+        <div className="border border-border rounded-sm p-4 min-w-0">
+          <div className="section-label mb-3">Trading return %</div>
+          {tradingReturnCurve.length > 1 ? (
+            <PerformanceAreaChart
+              data={tradingReturnCurve}
+              dataKey="returnPct"
+              height={chartHeight}
+              yTickFormatter={(v) => `${Number(v).toFixed(0)}%`}
+              tooltipFormatter={(v) => [`${Number(v).toFixed(2)}%`, "Trading Return"]}
+            />
+          ) : (
+            <div
+              className="flex items-center justify-center text-xs text-muted-foreground"
+              style={{ height: chartHeight }}
+            >
+              Close trades to build trading return curve
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="border border-border rounded-sm">
-        <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+        <div className="flex items-center justify-between px-4 py-2.5 border-b border-border">
           <span className="section-label">Recent Trades</span>
           <Link href="/journal">
             <span className="text-xs text-muted-foreground hover:text-foreground cursor-pointer">View all</span>
@@ -157,17 +162,17 @@ export default function Dashboard() {
                     t.outcome === "win"
                       ? "bg-green-400"
                       : t.outcome === "loss"
-                      ? "bg-red-400"
-                      : t.outcome === "breakeven"
-                      ? "bg-muted-foreground"
-                      : "bg-yellow-500"
+                        ? "bg-red-400"
+                        : t.outcome === "breakeven"
+                          ? "bg-muted-foreground"
+                          : "bg-yellow-500"
                   }`}
                 />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 text-sm">
                     <span className="font-mono font-medium">{t.coin}</span>
                     <span className="text-muted-foreground text-xs">{t.setupType}</span>
-                    <span className="text-muted-foreground text-xs">· {t.timeframe}</span>
+                    <span className="text-muted-foreground text-xs">· {t.marketCapTier ?? t.timeframe ?? "Unclassified"}</span>
                   </div>
                   <div className="text-[10px] text-muted-foreground font-mono mt-0.5">
                     {formatTradeDateTime(t.createdAt)}
@@ -183,8 +188,8 @@ export default function Dashboard() {
                       t.outcome === "breakeven" || t.actualPnlPct === 0
                         ? "text-muted-foreground"
                         : t.actualPnlPct > 0
-                        ? "text-green-400"
-                        : "text-red-400"
+                          ? "text-green-400"
+                          : "text-red-400"
                     }`}
                   >
                     {t.actualPnlPct > 0 ? "+" : ""}{t.actualPnlPct.toFixed(2)}%

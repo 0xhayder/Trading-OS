@@ -1,6 +1,7 @@
 import { Fragment, useState } from "react";
 import { useWatchlist } from "@/lib/store";
 import { Trash2 } from "lucide-react";
+import CapitalSummary from "@/components/CapitalSummary";
 import { formatTradeDateShort, formatTradeDateTime, formatTradeTimeOnly } from "@/lib/formatDates";
 
 export default function Watchlist() {
@@ -25,12 +26,15 @@ export default function Watchlist() {
 
   return (
     <div className="p-6 space-y-5">
-      <div>
-        <h1 className="text-sm font-semibold">Watchlist</h1>
-        <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
-          Setups you saved from the WATCHLIST path on the decision screen (often watchlist band 45–59, or your choice to
-          track). Outcomes here do not move account capital.
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-sm font-semibold">Watchlist</h1>
+          <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
+            Setups you saved from the WATCHLIST path on the decision screen (often watchlist band 45–59, or your choice to
+            track). Outcomes here do not move account capital.
+          </p>
+        </div>
+        <CapitalSummary />
       </div>
 
       {watchlist.length === 0 ? (
@@ -45,7 +49,7 @@ export default function Watchlist() {
                 <th className="px-3 py-2.5 text-left section-label">Date</th>
                 <th className="px-3 py-2.5 text-left section-label">Coin</th>
                 <th className="px-3 py-2.5 text-left section-label">Setup</th>
-                <th className="px-3 py-2.5 text-left section-label">TF</th>
+                <th className="px-3 py-2.5 text-left section-label">Tier</th>
                 <th className="px-3 py-2.5 text-left section-label">Score</th>
                 <th className="px-3 py-2.5 text-left section-label">Outcome</th>
                 <th className="px-3 py-2.5 text-left section-label"></th>
@@ -64,7 +68,7 @@ export default function Watchlist() {
                     </td>
                     <td className="px-3 py-2.5 font-mono text-sm font-medium">{w.coin}</td>
                     <td className="px-3 py-2.5 text-xs text-muted-foreground">{w.setupType}</td>
-                    <td className="px-3 py-2.5 font-mono text-xs text-muted-foreground">{w.timeframe}</td>
+                    <td className="px-3 py-2.5 font-mono text-xs text-muted-foreground">{w.marketCapTier ?? w.timeframe ?? "-"}</td>
                     <td className="px-3 py-2.5 font-mono text-sm text-yellow-500">{w.finalScore}</td>
                     <td className="px-3 py-2.5 text-xs text-muted-foreground">{w.outcome ?? "Watching"}</td>
                     <td className="px-3 py-2.5">

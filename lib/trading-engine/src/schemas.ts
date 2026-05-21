@@ -59,6 +59,10 @@ export const engineTradeInputSchema = z.object({
       stopLossPct: z.number().positive(),
       tp1Pct: z.number().nonnegative(),
       tp2Pct: z.number().nonnegative(),
+      tp3Pct: z.number().nonnegative().optional(),
+      tp1PositionPct: z.number().nonnegative().max(100).optional(),
+      tp2PositionPct: z.number().nonnegative().max(100).optional(),
+      tp3PositionPct: z.number().nonnegative().max(100).optional(),
     })
     .optional(),
 });

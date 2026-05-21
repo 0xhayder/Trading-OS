@@ -43,7 +43,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         </nav>
       </aside>
 
-      <main className="flex-1 overflow-y-auto">{children}</main>
+      <main className="flex-1 flex flex-col min-w-0 w-full overflow-hidden">
+        <div className="flex-1 overflow-y-auto min-w-0">{children}</div>
+      </main>
     </div>
   );
 }

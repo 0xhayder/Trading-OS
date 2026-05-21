@@ -1,4 +1,4 @@
-import type { Settings, Trade, WatchlistTrade } from "./types";
+import type { CapitalAdjustment, Settings, Trade, WatchlistTrade } from "./types";
 
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T | null> {
   try {
@@ -83,3 +83,22 @@ export async function updateSettingsInSupabase(settings: Settings): Promise<Sett
     body: JSON.stringify(settings),
   });
 }
+
+export async function fetchCapitalAdjustmentsFromSupabase(): Promise<CapitalAdjustment[] | null> {
+  return requestJson<CapitalAdjustment[]>("capital-adjustments");
+}
+
+export async function createCapitalAdjustmentInSupabase(
+  adjustment: Omit<CapitalAdjustment, "id" | "createdAt"> & Partial<Pick<CapitalAdjustment, "id" | "createdAt">>,
+): Promise<CapitalAdjustment | null> {
+  return requestJson<CapitalAdjustment>("capital-adjustments", {
+    method: "POST",
+    body: JSON.stringify(adjustment),
+  });
+}
+
+export async function deleteCapitalAdjustmentFromSupabase(id: string): Promise<boolean> {
+  await requestJson<never>(`capital-adjustments/${id}`, { method: "DELETE" });
+  return true;
+}
+

@@ -1,33 +1,62 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
 import { useSettings, useTrades, useWatchlist } from "@/lib/store";
+import CapitalSummary from "@/components/CapitalSummary";
 import { scoreTradeInput } from "@/lib/scorer";
-import type { TradeInput, ScoreResult, SetupType, Timeframe, MarketCondition, NarrativeStrength, LevelClarity, TfAlignment, RetestQuality, VolumeStrength, CandleImpulse, FollowThrough, EntryDistance, SpaceToResistance, RRQuality, Overextension, EventRisk, LiquidityRisk } from "@/lib/types";
+import { MARKET_TREND_OPTIONS, TOKEN_STRUCTURE_OPTIONS } from "@/lib/tradeFormConstants";
+import type {
+  BtcVolatilityState,
+  EntryLocation,
+  EventRisk,
+  InvalidationType,
+  LiquidityStability,
+  MarketCapTier,
+  MarketTrend,
+  MoveSlRule,
+  NarrativeCategory,
+  NarrativeHeat,
+  Overextension,
+  PostBreakoutBehavior,
+  RelativeVolume,
+  ScoreResult,
+  SetupType,
+  TokenMarketStructure,
+  TradeInput,
+  VolumeState,
+} from "@/lib/types";
 import { ArrowLeft } from "lucide-react";
 import { DecisionTerminal } from "@/components/DecisionTerminal";
+
+const FORM_GRID = "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3";
 
 const DEFAULTS: TradeInput = {
   coin: "",
   setupType: "Breakout Retest",
-  timeframe: "Daily",
-  btcCondition: "Neutral",
-  altCondition: "Neutral",
-  narrativeStrength: "Active",
-  levelClarity: "Clean",
-  timeframeAlignment: "Partially Aligned",
-  retestQuality: "Decent",
-  volumeStrength: "Normal",
-  candleImpulse: "Strong",
-  followThrough: "Slowing",
-  stopLossPct: 3,
-  tp1Pct: 6,
-  tp2Pct: 12,
-  entryDistance: "Decent",
-  spaceToResistance: "Decent Space",
-  rrQuality: "RR 2 to 3",
+  narrativeCategory: "AI",
+  marketCapTier: "Mid Cap",
+  btcTrend: "Neutral",
+  altTrend: "Neutral",
+  btcVolatilityState: "Calm",
+  narrativeHeat: "Active",
+  tokenHigherTfStructure: "Ranging",
+  tokenMidTfStructure: "Ranging",
+  tokenLowerTfStructure: "Ranging",
+  volumeState: "Normal",
+  relativeVolume: "Average",
+  postBreakoutBehavior: "Holding",
+  stopLossPct: 0,
+  tp1Pct: undefined,
+  tp2Pct: undefined,
+  tp3Pct: undefined,
+  tp1PositionPct: 40,
+  tp2PositionPct: 40,
+  tp3PositionPct: 20,
+  entryLocation: "At Key Level",
   overextension: "Calm",
   eventRisk: "Low",
-  liquidityRisk: "Acceptable",
+  liquidityStability: "Stable",
+  moveSlRule: "After TP1",
+  invalidationType: "Structure Loss",
   notes: "",
 };
 
@@ -44,46 +73,79 @@ function SectionDivider({ label }: { label: string }) {
   );
 }
 
-function Select({ label, value, onChange, options }: {
+function Select({
+  label,
+  value,
+  onChange,
+  options,
+}: {
   label: string;
   value: string;
   onChange: (v: string) => void;
-  options: string[];
+  options: readonly string[];
 }) {
   return (
     <div>
       <Label text={label} />
       <select
-        className="w-full bg-background border border-border rounded-sm px-3 py-2 text-sm font-mono text-foreground focus:outline-none focus:border-ring cursor-pointer appearance-none"
+        className="form-select w-full bg-background border border-border rounded-sm px-3 py-2 text-sm font-mono text-foreground focus:outline-none focus:border-ring cursor-pointer"
         value={value}
         onChange={(e) => onChange(e.target.value)}
       >
-        {options.map((o) => <option key={o}>{o}</option>)}
+        {options.map((o) => (
+          <option key={o}>{o}</option>
+        ))}
       </select>
     </div>
   );
 }
 
-function NumberInput({ label, value, onChange, placeholder }: {
+function NumberInput({
+  label,
+  value,
+  onChange,
+  placeholder,
+  optional,
+  step = "0.01",
+  min = "0",
+}: {
   label: string;
-  value: number;
-  onChange: (v: number) => void;
+  value: number | undefined;
+  onChange: (v: number | undefined) => void;
   placeholder?: string;
+  optional?: boolean;
+  step?: string;
+  min?: string;
 }) {
   return (
     <div>
       <Label text={label} />
       <input
         type="number"
-        step="0.1"
-        min="0"
+        step={step}
+        min={min}
         className="w-full bg-background border border-border rounded-sm px-3 py-2 text-sm font-mono text-foreground focus:outline-none focus:border-ring"
         placeholder={placeholder}
-        value={value || ""}
-        onChange={(e) => onChange(parseFloat(e.target.value) || 0)}
+        value={value ?? ""}
+        onChange={(e) => {
+          const parsed = parseFloat(e.target.value);
+          onChange(Number.isFinite(parsed) ? parsed : optional ? undefined : 0);
+        }}
       />
     </div>
   );
+}
+
+function weightedRr(form: TradeInput): number {
+  if (form.stopLossPct <= 0) return 0;
+  const legs = [
+    { pct: form.tp1Pct ?? 0, weight: form.tp1PositionPct },
+    { pct: form.tp2Pct ?? 0, weight: form.tp2PositionPct },
+    { pct: form.tp3Pct ?? 0, weight: form.tp3PositionPct },
+  ].filter((leg) => leg.pct > 0 && leg.weight > 0);
+  const weightTotal = legs.reduce((sum, leg) => sum + leg.weight, 0);
+  if (!weightTotal) return 0;
+  return legs.reduce((sum, leg) => sum + (leg.pct / form.stopLossPct) * (leg.weight / weightTotal), 0);
 }
 
 type View = "form" | "result";
@@ -101,11 +163,13 @@ export default function TradeEntry() {
   const set = <K extends keyof TradeInput>(key: K, val: TradeInput[K]) =>
     setForm((p) => ({ ...p, [key]: val }));
 
+  const validForm = form.coin.trim().length > 0 && form.stopLossPct > 0;
+
   const handleScore = () => {
-    if (!form.coin.trim()) return;
+    if (!validForm) return;
     const scored = scoreTradeInput(form, settings);
     setResult(scored);
-    const targetAmount = Math.round((settings.totalCapital * (scored.suggestedAllocationPct / 100)) * 100) / 100;
+    const targetAmount = Math.round(settings.totalCapital * (scored.suggestedAllocationPct / 100) * 100) / 100;
     setAllocatedAmountUsd(String(targetAmount));
     setView("result");
   };
@@ -163,12 +227,8 @@ export default function TradeEntry() {
       "Asymmetric Swing Trade": { min: 35, max: 60 },
     };
     const allocationBand = allocationBandByStatus[result.tradeStatus];
-    const minAllocationUsd = allocationBand
-      ? Math.round((capital * (allocationBand.min / 100)) * 100) / 100
-      : 0;
-    const maxAllocationUsd = allocationBand
-      ? Math.round((capital * (allocationBand.max / 100)) * 100) / 100
-      : 0;
+    const minAllocationUsd = allocationBand ? Math.round(capital * (allocationBand.min / 100) * 100) / 100 : 0;
+    const maxAllocationUsd = allocationBand ? Math.round(capital * (allocationBand.max / 100) * 100) / 100 : 0;
 
     return (
       <div className="p-6 space-y-5 max-w-3xl mx-auto">
@@ -181,11 +241,14 @@ export default function TradeEntry() {
           Back to form
         </button>
 
-        <div>
-          <h1 className="text-sm font-semibold text-muted-foreground">Decision terminal</h1>
-          <p className="text-xs text-muted-foreground mt-0.5 font-mono">
-            {form.coin} · {form.setupType} · {form.timeframe}
-          </p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-sm font-semibold text-muted-foreground">Decision terminal</h1>
+            <p className="text-xs text-muted-foreground mt-0.5 font-mono">
+              {form.coin} / {form.setupType} / {form.marketCapTier}
+            </p>
+          </div>
+          <CapitalSummary />
         </div>
 
         {result.presentation ? (
@@ -202,94 +265,101 @@ export default function TradeEntry() {
             onWatchlist={handleAddToWatchlist}
             onDiscard={handleDiscard}
           />
-        ) : (
-          <div className="text-sm text-muted-foreground border border-border rounded-sm p-4">
-            This saved result has no presentation layer. Re-score the setup to see the new terminal.
-          </div>
-        )}
+        ) : null}
       </div>
     );
   }
 
+  const rr = weightedRr(form);
+
   return (
-    <div className="p-6 space-y-5">
-      <div>
+    <div className="p-6 space-y-4 w-full min-w-0">
+      <div className="flex items-center justify-between">
         <h1 className="text-sm font-semibold">New Trade</h1>
-        <p className="text-xs text-muted-foreground mt-0.5">Fill all fields, then submit to score</p>
+        <CapitalSummary />
       </div>
 
-      <div className="space-y-5">
-        <SectionDivider label="1 — Basic Info" />
-        <div className="grid grid-cols-3 gap-4">
+      <div className="space-y-5 w-full">
+        <SectionDivider label="A — Trade Identity" />
+        <div className={FORM_GRID}>
           <div>
             <Label text="Coin / Pair" />
             <input
               className="w-full bg-background border border-border rounded-sm px-3 py-2 text-sm font-mono text-foreground placeholder-muted-foreground focus:outline-none focus:border-ring uppercase"
-              placeholder="TAO/USDT"
+              placeholder="BTC/USD"
               value={form.coin}
               onChange={(e) => set("coin", e.target.value.toUpperCase())}
             />
           </div>
-          <Select
-            label="Setup Type"
-            value={form.setupType}
-            onChange={(v) => set("setupType", v as SetupType)}
-            options={["Breakout Retest", "Double Bottom", "Trendline Reclaim", "Trend Continuation"]}
-          />
-          <Select
-            label="Timeframe"
-            value={form.timeframe}
-            onChange={(v) => set("timeframe", v as Timeframe)}
-            options={["4H", "Daily", "Weekly"]}
-          />
+          <Select label="Setup Type" value={form.setupType} onChange={(v) => set("setupType", v as SetupType)} options={["Breakout Retest", "Double Bottom", "Trend Continuation", "Trendline Reclaim"]} />
+          <Select label="Narrative Category" value={form.narrativeCategory} onChange={(v) => set("narrativeCategory", v as NarrativeCategory)} options={["AI", "DeFi", "Gaming", "Meme", "Layer 1", "Layer 2", "RWA", "Other"]} />
+        </div>
+        <div className={FORM_GRID}>
+          <Select label="Market Cap Tier" value={form.marketCapTier} onChange={(v) => set("marketCapTier", v as MarketCapTier)} options={["Small Cap", "Mid Cap", "Large Cap"]} />
         </div>
 
-        <SectionDivider label="2 — Market" />
-        <div className="grid grid-cols-3 gap-4">
-          <Select label="BTC Condition" value={form.btcCondition} onChange={(v) => set("btcCondition", v as MarketCondition)} options={["Strong Bullish", "Bullish", "Neutral", "Bearish", "Strong Bearish"]} />
-          <Select label="Alt Condition" value={form.altCondition} onChange={(v) => set("altCondition", v as MarketCondition)} options={["Strong Bullish", "Bullish", "Neutral", "Bearish", "Strong Bearish"]} />
-          <Select label="Narrative" value={form.narrativeStrength} onChange={(v) => set("narrativeStrength", v as NarrativeStrength)} options={["Hot", "Active", "Neutral", "Weak", "Dead"]} />
+        <SectionDivider label="B — Market Regime" />
+        <div className={FORM_GRID}>
+          <Select label="BTC Trend" value={form.btcTrend} onChange={(v) => set("btcTrend", v as MarketTrend)} options={MARKET_TREND_OPTIONS} />
+          <Select label="Alts Trend" value={form.altTrend} onChange={(v) => set("altTrend", v as MarketTrend)} options={MARKET_TREND_OPTIONS} />
+          <Select label="BTC Volatility" value={form.btcVolatilityState} onChange={(v) => set("btcVolatilityState", v as BtcVolatilityState)} options={["Calm", "Elevated", "Violent"]} />
+        </div>
+        <div className={FORM_GRID}>
+          <Select label="Narrative Heat" value={form.narrativeHeat} onChange={(v) => set("narrativeHeat", v as NarrativeHeat)} options={["Dead", "Weak", "Active", "Hot", "Euphoric"]} />
         </div>
 
-        <SectionDivider label="3 — Structure" />
-        <div className="grid grid-cols-3 gap-4">
-          <Select label="Level Clarity" value={form.levelClarity} onChange={(v) => set("levelClarity", v as LevelClarity)} options={["Extremely Obvious", "Clean", "Medium", "Forced / Messy"]} />
-          <Select label="TF Alignment" value={form.timeframeAlignment} onChange={(v) => set("timeframeAlignment", v as TfAlignment)} options={["Fully Aligned", "Partially Aligned", "Counter Trend"]} />
-          <Select label="Retest Quality" value={form.retestQuality} onChange={(v) => set("retestQuality", v as RetestQuality)} options={["Strong", "Decent", "Weak", "None"]} />
+        <SectionDivider label="C — Token Structure" />
+        <div className={FORM_GRID}>
+          <Select label="Higher TF Structure" value={form.tokenHigherTfStructure} onChange={(v) => set("tokenHigherTfStructure", v as TokenMarketStructure)} options={TOKEN_STRUCTURE_OPTIONS} />
+          <Select label="Mid TF Structure" value={form.tokenMidTfStructure} onChange={(v) => set("tokenMidTfStructure", v as TokenMarketStructure)} options={TOKEN_STRUCTURE_OPTIONS} />
+          <Select label="Lower TF Structure" value={form.tokenLowerTfStructure} onChange={(v) => set("tokenLowerTfStructure", v as TokenMarketStructure)} options={TOKEN_STRUCTURE_OPTIONS} />
         </div>
 
-        <SectionDivider label="4 — Momentum" />
-        <div className="grid grid-cols-3 gap-4">
-          <Select label="Volume" value={form.volumeStrength} onChange={(v) => set("volumeStrength", v as VolumeStrength)} options={["Strong Expansion", "Normal", "Weak"]} />
-          <Select label="Candle Impulse" value={form.candleImpulse} onChange={(v) => set("candleImpulse", v as CandleImpulse)} options={["Explosive", "Strong", "Weak"]} />
-          <Select label="Follow Through" value={form.followThrough} onChange={(v) => set("followThrough", v as FollowThrough)} options={["Continuation Present", "Slowing", "Failing"]} />
+        <SectionDivider label="D — Momentum" />
+        <div className={FORM_GRID}>
+          <Select label="Volume State" value={form.volumeState} onChange={(v) => set("volumeState", v as VolumeState)} options={["Weak", "Normal", "Expansion", "Extreme Expansion"]} />
+          <Select label="Relative Volume" value={form.relativeVolume} onChange={(v) => set("relativeVolume", v as RelativeVolume)} options={["Below Average", "Average", "High", "Extreme"]} />
+          <Select label="Post Breakout" value={form.postBreakoutBehavior} onChange={(v) => set("postBreakoutBehavior", v as PostBreakoutBehavior)} options={["Immediate Continuation", "Holding", "Stalling", "Failing"]} />
         </div>
 
-        <SectionDivider label="5 — Entry" />
-        <div className="grid grid-cols-3 gap-4">
-          <NumberInput label="Stop Loss %" value={form.stopLossPct} onChange={(v) => set("stopLossPct", v)} placeholder="3.5" />
-          <NumberInput label="TP1 %" value={form.tp1Pct} onChange={(v) => set("tp1Pct", v)} placeholder="7" />
-          <NumberInput label="TP2 %" value={form.tp2Pct} onChange={(v) => set("tp2Pct", v)} placeholder="14" />
+        <SectionDivider label="E — Entry & Execution" />
+        <div className={FORM_GRID}>
+          <NumberInput label="Stop Loss %" value={form.stopLossPct} onChange={(v) => set("stopLossPct", v ?? 0)} placeholder="2.5" />
+          <NumberInput label="TP1 %" value={form.tp1Pct} onChange={(v) => set("tp1Pct", v)} optional placeholder="5" />
+          <NumberInput label="TP2 %" value={form.tp2Pct} onChange={(v) => set("tp2Pct", v)} optional placeholder="10" />
         </div>
-        <div className="grid grid-cols-3 gap-4">
-          <Select label="Entry Distance" value={form.entryDistance} onChange={(v) => set("entryDistance", v as EntryDistance)} options={["Perfect", "Decent", "Chased"]} />
-          <Select label="Space to Resistance" value={form.spaceToResistance} onChange={(v) => set("spaceToResistance", v as SpaceToResistance)} options={["Large Space", "Decent Space", "Limited Space"]} />
-          <Select label="RR Quality" value={form.rrQuality} onChange={(v) => set("rrQuality", v as RRQuality)} options={["RR > 5", "RR 3 to 5", "RR 2 to 3", "RR < 2"]} />
+        <div className={FORM_GRID}>
+          <NumberInput label="TP3 %" value={form.tp3Pct} onChange={(v) => set("tp3Pct", v)} optional placeholder="15" />
+          <NumberInput label="TP1 Position %" value={form.tp1PositionPct} onChange={(v) => set("tp1PositionPct", v ?? 0)} placeholder="40" step="1" />
+          <NumberInput label="TP2 Position %" value={form.tp2PositionPct} onChange={(v) => set("tp2PositionPct", v ?? 0)} placeholder="40" step="1" />
+        </div>
+        <div className={FORM_GRID}>
+          <NumberInput label="TP3 Position %" value={form.tp3PositionPct} onChange={(v) => set("tp3PositionPct", v ?? 0)} placeholder="20" step="1" />
+          <Select label="Entry Location" value={form.entryLocation} onChange={(v) => set("entryLocation", v as EntryLocation)} options={["At Key Level", "Slightly Extended", "Chased"]} />
+          <div className="border border-border rounded-sm px-3 py-2 text-xs font-mono text-muted-foreground flex items-center">
+            Weighted RR: {rr > 0 ? `${rr.toFixed(2)}R` : "Add targets"}
+          </div>
         </div>
 
-        <SectionDivider label="6 — Risk" />
-        <div className="grid grid-cols-3 gap-4">
+        <SectionDivider label="F — Risk Stack" />
+        <div className={FORM_GRID}>
           <Select label="Overextension" value={form.overextension} onChange={(v) => set("overextension", v as Overextension)} options={["Calm", "Extended", "Euphoric"]} />
           <Select label="Event Risk" value={form.eventRisk} onChange={(v) => set("eventRisk", v as EventRisk)} options={["Low", "Medium", "High"]} />
-          <Select label="Liquidity" value={form.liquidityRisk} onChange={(v) => set("liquidityRisk", v as LiquidityRisk)} options={["High Liquidity", "Acceptable", "Dangerous"]} />
+          <Select label="Liquidity Stability" value={form.liquidityStability} onChange={(v) => set("liquidityStability", v as LiquidityStability)} options={["Stable", "Moderate", "Thin", "Dangerous"]} />
+        </div>
+
+        <SectionDivider label="G — Trade Management" />
+        <div className={FORM_GRID}>
+          <Select label="Move SL Rule" value={form.moveSlRule} onChange={(v) => set("moveSlRule", v as MoveSlRule)} options={["Never", "After TP1", "After Structure Shift", "Manual"]} />
+          <Select label="Invalidation Type" value={form.invalidationType} onChange={(v) => set("invalidationType", v as InvalidationType)} options={["Structure Loss", "Support Loss", "Volume Failure", "BTC Weakness"]} />
         </div>
 
         <div>
-          <Label text="Notes (optional)" />
+          <Label text="Raw Observation Notes (optional)" />
           <textarea
             className="w-full bg-background border border-border rounded-sm px-3 py-2 text-sm font-mono text-foreground placeholder-muted-foreground focus:outline-none focus:border-ring resize-none"
             rows={3}
-            placeholder="Setup context, key levels, reason for entry..."
+            placeholder="Structure notes, orderflow observations..."
             value={form.notes}
             onChange={(e) => set("notes", e.target.value)}
           />
@@ -297,12 +367,12 @@ export default function TradeEntry() {
 
         <button
           className={`w-full py-2.5 text-sm font-mono rounded-sm transition-opacity ${
-            !form.coin.trim()
+            !validForm
               ? "bg-muted text-muted-foreground cursor-not-allowed"
               : "bg-foreground text-background hover:opacity-90"
           }`}
           onClick={handleScore}
-          disabled={!form.coin.trim()}
+          disabled={!validForm}
         >
           Score Setup
         </button>

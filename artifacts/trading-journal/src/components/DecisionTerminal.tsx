@@ -185,7 +185,7 @@ export function DecisionTerminal({
           ))}
         </ul>
         <p className="text-xs text-muted-foreground border-t border-border pt-3">
-          Old note: a high number alone never overrides the headline state. Read the headline first, then the scores.
+          A high score never overrides a veto. Read the decision first, then the scores.
         </p>
       </div>
 
@@ -227,7 +227,7 @@ export function DecisionTerminal({
             <span>{p.allocation.expectedVolatility}</span>
           </div>
           <div className="sm:col-span-2">
-            <span className="text-muted-foreground">Capital comfort · </span>
+            <span className="text-muted-foreground">Capital state · </span>
             <span>{p.allocation.capitalExposureQuality}</span>
           </div>
           <div className="sm:col-span-2 text-xs text-muted-foreground font-mono">
@@ -260,7 +260,7 @@ export function DecisionTerminal({
           ))}
         </div>
         <p className="text-[11px] text-muted-foreground">
-          Form targets: SL {form.stopLossPct}% · TP1 {form.tp1Pct}% · TP2 {form.tp2Pct}% · RR readout {result.suggestedRr > 0 ? `${result.suggestedRr}:1` : "—"}
+          Plan levels: SL {form.stopLossPct ? `${form.stopLossPct}%` : "-"} · TP1 {form.tp1Pct ? `${form.tp1Pct}%` : "-"} · TP2 {form.tp2Pct ? `${form.tp2Pct}%` : "-"} · TP3 {form.tp3Pct ? `${form.tp3Pct}%` : "-"} · Weighted RR {result.suggestedRr > 0 ? `${result.suggestedRr}:1` : "-"}
         </p>
       </div>
 
