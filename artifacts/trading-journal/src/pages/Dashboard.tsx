@@ -3,7 +3,7 @@ import { useCapitalAdjustments, useSettings, useTrades } from "@/lib/store";
 import CapitalSummary from "@/components/CapitalSummary";
 import {
   accountReturnPct,
-  buildEquityCurveUsd,
+  buildNetPnlCurveUsd,
   buildTradingReturnPctCurve,
   initialCapitalUsd,
   isBreakevenClosed,
@@ -38,7 +38,7 @@ export default function Dashboard() {
   const closedChrono = [...closed].sort(
     (a, b) => new Date(a.closedAt ?? a.createdAt).getTime() - new Date(b.closedAt ?? b.createdAt).getTime(),
   );
-  const tradingEquityCurve = buildEquityCurveUsd(closedChrono, equityStartUsd);
+  const netPnlCurve = buildNetPnlCurveUsd(closedChrono);
   const tradingReturnCurve = buildTradingReturnPctCurve(closedChrono);
 
   const recent = [...trades]
@@ -98,21 +98,21 @@ export default function Dashboard() {
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-5 pt-2">
         <div className="border border-border rounded-sm p-4 min-w-0">
-          <div className="section-label mb-3">Trading equity curve</div>
-          {tradingEquityCurve.length > 1 ? (
+          <div className="section-label mb-3">Net PnL $</div>
+          {netPnlCurve.length > 1 ? (
             <PerformanceAreaChart
-              data={tradingEquityCurve}
-              dataKey="equityUsd"
+              data={netPnlCurve}
+              dataKey="pnlUsd"
               height={chartHeight}
-              yTickFormatter={(v) => `$${Number(v).toLocaleString(undefined, { maximumFractionDigits: 0 })}`}
-              tooltipFormatter={(v) => [`$${Number(v).toFixed(2)}`, "Equity"]}
+              yTickFormatter={(v) => `${Number(v) >= 0 ? "+" : "-"}$${Math.abs(Number(v)).toLocaleString(undefined, { maximumFractionDigits: 0 })}`}
+              tooltipFormatter={(v) => [`${Number(v) >= 0 ? "+" : "-"}$${Math.abs(Number(v)).toFixed(2)}`, "Net PnL"]}
             />
           ) : (
             <div
               className="flex items-center justify-center text-xs text-muted-foreground"
               style={{ height: chartHeight }}
             >
-              Close trades to build trading equity
+              Close trades to build net PnL
             </div>
           )}
         </div>

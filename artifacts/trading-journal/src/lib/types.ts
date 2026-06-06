@@ -140,6 +140,8 @@ export interface ScoreResult {
   scoredAt?: string;
   /** Rich institutional-style decision terminal payload (missing on very old saved rows) */
   presentation?: DecisionPresentation;
+  /** Raw persisted engine diagnostics for details after reload. */
+  scoreBreakdown?: Record<string, unknown>;
 }
 
 export interface Trade extends TradeInput, ScoreResult {

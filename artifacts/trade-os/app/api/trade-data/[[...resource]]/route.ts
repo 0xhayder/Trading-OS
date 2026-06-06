@@ -153,6 +153,9 @@ function toTrade(row: JsonRow) {
     suggestedRr: Number(row.suggested_rr ?? 0),
     warnings: splitWarnings(row.trade_warnings),
     finalDecision: String(row.final_decision ?? ""),
+    scoreBreakdown: typeof row.score_breakdown === "object" && row.score_breakdown != null
+      ? row.score_breakdown
+      : undefined,
     createdAt: String(row.created_at ?? new Date().toISOString()),
     closedAt: typeof row.closed_at === "string" ? row.closed_at : undefined,
     allocatedAmountUsd: row.allocated_amount_usd == null ? undefined : Number(row.allocated_amount_usd),
@@ -240,6 +243,11 @@ function toTradeInsert(trade: JsonRow) {
     expected_profit_pct: trade.tp2Pct ?? 0,
     expected_loss_pct: -Number(trade.stopLossPct ?? 0),
     final_decision: trade.finalDecision,
+    score_breakdown: {
+      ...(typeof trade.scoreBreakdown === "object" && trade.scoreBreakdown != null ? trade.scoreBreakdown : {}),
+      ...(typeof trade.presentation === "object" && trade.presentation != null ? { presentation: trade.presentation } : {}),
+      scoredAt: trade.scoredAt ?? null,
+    },
     created_at: trade.createdAt ?? new Date().toISOString(),
     allocated_amount_usd: toFiniteNumber(trade.allocatedAmountUsd) ?? null,
     realized_pnl_usd: calculateRealizedPnlUsd(toFiniteNumber(trade.allocatedAmountUsd), actualPnlPct),
@@ -287,6 +295,7 @@ function toWatchlistInsert(item: JsonRow) {
     expected_loss_pct: _expectedLossPct,
     closed_at: _closedAt,
     realized_pnl_usd: _realizedPnlUsd,
+    score_breakdown: _scoreBreakdown,
     ...row
   } = toTradeInsert(item);
 

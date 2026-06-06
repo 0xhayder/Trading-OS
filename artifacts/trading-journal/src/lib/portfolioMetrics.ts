@@ -95,6 +95,7 @@ export function totalTradingReturnPct(closed: Trade[]): number {
 }
 
 export type ReturnCurvePoint = { date: string; returnPct: number };
+export type PnlCurvePoint = { date: string; pnlUsd: number };
 
 export function buildTradingReturnPctCurve(closedSortedOldestFirst: Trade[]): ReturnCurvePoint[] {
   const points: ReturnCurvePoint[] = [{ date: "Start", returnPct: 0 }];
@@ -104,6 +105,19 @@ export function buildTradingReturnPctCurve(closedSortedOldestFirst: Trade[]): Re
     points.push({
       date: labelDate(t.closedAt ?? t.createdAt),
       returnPct: Math.round(cum * 100) / 100,
+    });
+  }
+  return points;
+}
+
+export function buildNetPnlCurveUsd(closedSortedOldestFirst: Trade[]): PnlCurvePoint[] {
+  const points: PnlCurvePoint[] = [{ date: "Start", pnlUsd: 0 }];
+  let cum = 0;
+  for (const t of closedSortedOldestFirst) {
+    cum += tradeRealizedUsd(t);
+    points.push({
+      date: labelDate(t.closedAt ?? t.createdAt),
+      pnlUsd: Math.round(cum * 100) / 100,
     });
   }
   return points;

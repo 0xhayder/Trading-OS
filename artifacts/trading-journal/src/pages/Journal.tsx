@@ -2,6 +2,7 @@ import { Fragment, useState } from "react";
 import { useSettings, useTrades } from "@/lib/store";
 import { Trash2, ChevronUp, ChevronDown } from "lucide-react";
 import CapitalSummary from "@/components/CapitalSummary";
+import TradeDetailsPanel from "@/components/TradeDetailsPanel";
 import type { PrimaryMistakeTag, Trade, TradeOutcome } from "@/lib/types";
 import { formatTradeDateShort, formatTradeDateTime, formatTradeTimeOnly } from "@/lib/formatDates";
 
@@ -42,15 +43,6 @@ function normalizePnl(outcome: TradeOutcome | "", raw: string): number | undefin
   const magnitude = Math.abs(parseFloat(raw));
   if (!Number.isFinite(magnitude)) return undefined;
   return outcome === "loss" ? -magnitude : magnitude;
-}
-
-function Field({ label, value }: { label: string; value: React.ReactNode }) {
-  return (
-    <div className="border border-border rounded-sm px-3 py-2">
-      <div className="section-label mb-1">{label}</div>
-      <div className="text-xs font-mono text-foreground">{value || "-"}</div>
-    </div>
-  );
 }
 
 export default function Journal() {
@@ -264,30 +256,10 @@ export default function Journal() {
                           )}
                         </div>
 
-                        {!isClosed && (
-                          <div className="space-y-4">
-                            <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
-                              <Field label="Stop %" value={t.stopLossPct ?? t.stopLossPrice} />
-                              <Field
-                                label="TP Ladder %"
-                                value={[t.tp1Pct ?? t.tp1Price, t.tp2Pct ?? t.tp2Price, t.tp3Pct ?? t.tp3Price]
-                                  .filter((v) => v != null && Number(v) > 0)
-                                  .map((v) => `${v}%`)
-                                  .join(" / ") || "-"}
-                              />
-                              <Field label="Allocation" value={t.allocatedAmountUsd ? `$${t.allocatedAmountUsd.toFixed(2)}` : "-"} />
-                              <Field
-                                label="BTC / Alts Trend"
-                                value={`${t.btcTrend ?? t.btcHigherTfStructure ?? t.btcCondition ?? "-"} / ${t.altTrend ?? t.altHigherTfStructure ?? t.altCondition ?? "-"}`}
-                              />
-                              <Field
-                                label="Token Structure"
-                                value={`${t.tokenHigherTfStructure ?? t.breakoutState ?? "-"} / ${t.tokenMidTfStructure ?? t.reclaimStatus ?? "-"} / ${t.tokenLowerTfStructure ?? t.lowerTfEntryStructure ?? "-"}`}
-                              />
-                              <Field label="Risk Plan" value={`${t.moveSlRule ?? "-"} / ${t.invalidationType ?? "-"}`} />
-                              <Field label="Live State" value="Open trade. Outcome fields hidden until close." />
-                            </div>
+                        <TradeDetailsPanel trade={t} />
 
+                        {!isClosed && (
+                          <div className="space-y-4 mt-4">
                             <CloseEditor
                               editOutcome={editOutcome}
                               setEditOutcome={setEditOutcome}
@@ -310,23 +282,8 @@ export default function Journal() {
                           </div>
                         )}
 
-                        {isClosed && !isEditing && (
-                          <div className="space-y-4">
-                            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                              <Field label="Outcome" value={t.outcome?.toUpperCase()} />
-                              <Field label="Realized PnL" value={t.realizedPnlUsd != null ? `$${t.realizedPnlUsd.toFixed(2)}` : "-"} />
-                              <Field label="Result %" value={t.actualPnlPct != null ? `${t.actualPnlPct > 0 ? "+" : ""}${t.actualPnlPct.toFixed(2)}%` : "-"} />
-                              <Field label="Mistakes" value={tagsFromTrade(t.mistakeTags).join(", ") || "None tagged"} />
-                            </div>
-                            <ReadOnlyNote label="Mistake note" value={t.mistakeNote} />
-                            <ReadOnlyNote label="Close notes" value={t.closeNotes} />
-                            <ReadOnlyNote label="Management notes" value={t.managementNotes} />
-                            <ReadOnlyNote label="Execution analysis" value={t.executionAnalysis} />
-                          </div>
-                        )}
-
                         {isClosed && isEditing && (
-                          <div className="space-y-4">
+                          <div className="space-y-4 mt-4">
                             <CloseEditor
                               editOutcome={editOutcome}
                               setEditOutcome={setEditOutcome}
@@ -349,11 +306,6 @@ export default function Journal() {
                           </div>
                         )}
 
-                        {t.notes && (
-                          <div className="mt-4 pt-3 border-t border-border text-xs font-mono text-muted-foreground">
-                            {t.notes}
-                          </div>
-                        )}
                       </td>
                     </tr>
                   )}
@@ -363,16 +315,6 @@ export default function Journal() {
           </tbody>
         </table>
       </div>
-    </div>
-  );
-}
-
-function ReadOnlyNote({ label, value }: { label: string; value?: string }) {
-  if (!value) return null;
-  return (
-    <div className="border border-border rounded-sm p-3">
-      <div className="section-label mb-2">{label}</div>
-      <div className="text-xs text-muted-foreground font-mono whitespace-pre-wrap">{value}</div>
     </div>
   );
 }
