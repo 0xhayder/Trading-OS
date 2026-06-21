@@ -146,7 +146,7 @@ function toTrade(row: JsonRow) {
     rrQuality: String(row.rr_quality ?? "RR 2 to 3"),
     liquidityRisk: String(row.liquidity_risk ?? "Acceptable"),
     finalScore: Number(row.final_score ?? 0),
-    tradeStatus: String(row.trade_status ?? "Reject Trade"),
+    tradeStatus: String(row.trade_status ?? "Historical Insight"),
     suggestedAllocationPct: Number(row.suggested_allocation_pct ?? 0),
     suggestedSlPct: Number(row.suggested_sl_pct ?? 0),
     suggestedTpStructure: String(row.suggested_tp_structure ?? ""),

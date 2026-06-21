@@ -6,7 +6,7 @@ import TradeDetailsPanel from "@/components/TradeDetailsPanel";
 import type { PrimaryMistakeTag, Trade, TradeOutcome } from "@/lib/types";
 import { formatTradeDateShort, formatTradeDateTime, formatTradeTimeOnly } from "@/lib/formatDates";
 
-type SortKey = "createdAt" | "finalScore" | "actualPnlPct";
+type SortKey = "createdAt" | "actualPnlPct";
 
 const MISTAKE_TAGS: PrimaryMistakeTag[] = [
   "Early Entry",
@@ -175,8 +175,8 @@ export default function Journal() {
               <th className="px-3 py-2.5 text-left section-label">Coin</th>
               <th className="px-3 py-2.5 text-left section-label">Setup</th>
               <th className="px-3 py-2.5 text-left section-label">Tier</th>
-              <th className="px-3 py-2.5 text-left"><SortBtn k="finalScore" label="Score" /></th>
-              <th className="px-3 py-2.5 text-left section-label">Status</th>
+              <th className="px-3 py-2.5 text-left section-label">Timeframe</th>
+              <th className="px-3 py-2.5 text-left section-label">State</th>
               <th className="px-3 py-2.5 text-left"><SortBtn k="actualPnlPct" label="PnL" /></th>
               <th className="px-3 py-2.5 text-left section-label"></th>
             </tr>
@@ -206,9 +206,9 @@ export default function Journal() {
                     </td>
                     <td className="px-3 py-2.5 font-mono text-sm font-medium">{t.coin}</td>
                     <td className="px-3 py-2.5 text-xs text-muted-foreground">{t.setupType}</td>
-                    <td className="px-3 py-2.5 font-mono text-xs text-muted-foreground">{t.marketCapTier ?? t.timeframe ?? "-"}</td>
-                    <td className="px-3 py-2.5 font-mono text-sm">{t.finalScore}</td>
-                    <td className="px-3 py-2.5 text-xs text-muted-foreground">{isClosed ? "Closed" : t.tradeStatus}</td>
+                    <td className="px-3 py-2.5 font-mono text-xs text-muted-foreground">{t.marketCapTier ?? "-"}</td>
+                    <td className="px-3 py-2.5 font-mono text-xs text-muted-foreground">{t.timeframe ?? "-"}</td>
+                    <td className="px-3 py-2.5 text-xs text-muted-foreground">{isClosed ? "Closed" : "Open"}</td>
                     <td className="px-3 py-2.5 font-mono text-sm">
                       {t.actualPnlPct != null ? (
                         <span

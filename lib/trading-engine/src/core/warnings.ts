@@ -24,11 +24,11 @@ export function buildWarnings(
   }
 
   if (input.structure.htfAlignment === "conflict") {
-    w.push("Higher-timeframe alignment is conflicted.");
+    w.push("Token structure alignment is conflicted across higher, mid, and lower timeframes.");
   }
 
   if (input.structure.retestConfirmation === "none") {
-    w.push("No confirmation at the level.");
+    w.push("No usable confirmation from the current token structure inputs.");
   }
 
   if (input.momentum.relVolume === "below_average") {

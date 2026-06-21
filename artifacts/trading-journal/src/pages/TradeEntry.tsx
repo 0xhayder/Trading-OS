@@ -1,43 +1,30 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
-import { useSettings, useTrades, useWatchlist } from "@/lib/store";
 import CapitalSummary from "@/components/CapitalSummary";
-import { scoreTradeInput } from "@/lib/scorer";
-import { MARKET_TREND_OPTIONS, TOKEN_STRUCTURE_OPTIONS } from "@/lib/tradeFormConstants";
-import type {
-  BtcVolatilityState,
-  EntryLocation,
-  EventRisk,
-  InvalidationType,
-  LiquidityStability,
-  MarketCapTier,
-  MarketTrend,
-  MoveSlRule,
-  NarrativeCategory,
-  NarrativeHeat,
-  Overextension,
-  PostBreakoutBehavior,
-  RelativeVolume,
-  ScoreResult,
-  SetupType,
-  TokenMarketStructure,
-  TradeInput,
-  VolumeState,
-} from "@/lib/types";
-import { ArrowLeft } from "lucide-react";
-import { DecisionTerminal } from "@/components/DecisionTerminal";
+import { analyzeSimilarTrades, weightedRr, type SimilarityResult } from "@/lib/scorer";
+import { useSettings, useTrades, useWatchlist, useCapitalAdjustments } from "@/lib/store";
+import { totalCapitalAdjustmentsUsd, totalRealizedUsd } from "@/lib/portfolioMetrics";
+import type { MarketCapTier, MarketTrend, NarrativeCategory, NarrativeHeat, SetupType, TradeInput, TradeTimeframe } from "@/lib/types";
+import { ArrowLeft, Tag } from "lucide-react";
 
 const FORM_GRID = "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3";
+const SETUPS = ["Breakout Retest", "Double Bottom", "Trend Continuation", "Trendline Reclaim", "Other"] as const;
+const MARKET_TRENDS = ["Extreme Bullish", "Bullish", "Neutral", "Bearish", "Extreme Bearish"] as const;
+const NARRATIVE_STRENGTH = ["Dead", "Weak", "Neutral", "Active", "Hot"] as const;
+const NARRATIVE_CATEGORIES = ["AI", "DeFi", "RWA", "Infrastructure", "Gaming", "Meme", "Other"] as const;
+const MARKET_CAPS = ["Micro Cap", "Small Cap", "Mid Cap", "Large Cap"] as const;
+const TIMEFRAMES = ["Weekly", "Daily", "4H", "1H"] as const;
 
 const DEFAULTS: TradeInput = {
   coin: "",
   setupType: "Breakout Retest",
   narrativeCategory: "AI",
   marketCapTier: "Mid Cap",
+  timeframe: "Daily",
   btcTrend: "Neutral",
   altTrend: "Neutral",
   btcVolatilityState: "Calm",
-  narrativeHeat: "Active",
+  narrativeHeat: "Neutral",
   tokenHigherTfStructure: "Ranging",
   tokenMidTfStructure: "Ranging",
   tokenLowerTfStructure: "Ranging",
@@ -107,7 +94,6 @@ function NumberInput({
   placeholder,
   optional,
   step = "0.01",
-  min = "0",
 }: {
   label: string;
   value: number | undefined;
@@ -115,7 +101,6 @@ function NumberInput({
   placeholder?: string;
   optional?: boolean;
   step?: string;
-  min?: string;
 }) {
   return (
     <div>
@@ -123,7 +108,7 @@ function NumberInput({
       <input
         type="number"
         step={step}
-        min={min}
+        min="0"
         className="w-full bg-background border border-border rounded-sm px-3 py-2 text-sm font-mono text-foreground focus:outline-none focus:border-ring"
         placeholder={placeholder}
         value={value ?? ""}
@@ -136,106 +121,139 @@ function NumberInput({
   );
 }
 
-function weightedRr(form: TradeInput): number {
-  if (form.stopLossPct <= 0) return 0;
-  const legs = [
-    { pct: form.tp1Pct ?? 0, weight: form.tp1PositionPct },
-    { pct: form.tp2Pct ?? 0, weight: form.tp2PositionPct },
-    { pct: form.tp3Pct ?? 0, weight: form.tp3PositionPct },
-  ].filter((leg) => leg.pct > 0 && leg.weight > 0);
-  const weightTotal = legs.reduce((sum, leg) => sum + leg.weight, 0);
-  if (!weightTotal) return 0;
-  return legs.reduce((sum, leg) => sum + (leg.pct / form.stopLossPct) * (leg.weight / weightTotal), 0);
+function Stat({ label, value, color }: { label: string; value: string; color?: string }) {
+  return (
+    <div className="border border-border rounded-sm p-3">
+      <div className="section-label mb-1">{label}</div>
+      <div className={`font-mono text-lg font-semibold ${color ?? "text-foreground"}`}>{value}</div>
+    </div>
+  );
+}
+
+function pct(value: number, signed = false) {
+  const prefix = signed && value > 0 ? "+" : "";
+  return `${prefix}${value.toFixed(2)}%`;
+}
+
+function tone(value: number) {
+  return value > 0 ? "text-green-400" : value < 0 ? "text-red-400" : undefined;
 }
 
 type View = "form" | "result";
 
 export default function TradeEntry() {
   const [form, setForm] = useState<TradeInput>(DEFAULTS);
+  const [customSetup, setCustomSetup] = useState("");
   const [view, setView] = useState<View>("form");
-  const [result, setResult] = useState<ScoreResult | null>(null);
-  const [allocatedAmountUsd, setAllocatedAmountUsd] = useState("");
+  const [result, setResult] = useState<SimilarityResult | null>(null);
+  const [amountUsd, setAmountUsd] = useState("");
+  const [capitalPct, setCapitalPct] = useState("");
   const [, setLocation] = useLocation();
-  const { addTrade } = useTrades();
+  const { trades, addTrade } = useTrades();
   const { addToWatchlist } = useWatchlist();
   const { settings } = useSettings();
+  const { adjustments } = useCapitalAdjustments();
+
+  const closedTrades = trades.filter((t) => t.outcome && t.actualPnlPct != null);
+  const tradingPnlUsd = totalRealizedUsd(closedTrades);
+  const adjustmentsNetUsd = totalCapitalAdjustmentsUsd(adjustments);
+  const liveCapital = settings.totalCapital + tradingPnlUsd + adjustmentsNetUsd;
 
   const set = <K extends keyof TradeInput>(key: K, val: TradeInput[K]) =>
     setForm((p) => ({ ...p, [key]: val }));
 
-  const validForm = form.coin.trim().length > 0 && form.stopLossPct > 0;
+  const resolvedSetup = form.setupType === "Other" ? customSetup.trim() : form.setupType;
+  const validForm = form.coin.trim().length > 0 && resolvedSetup.length > 0 && form.stopLossPct > 0;
+  const rr = weightedRr({ ...form, setupType: resolvedSetup });
 
-  const handleScore = () => {
+  const handleSubmit = () => {
     if (!validForm) return;
-    const scored = scoreTradeInput(form, settings);
-    setResult(scored);
-    const targetAmount = Math.round(settings.totalCapital * (scored.suggestedAllocationPct / 100) * 100) / 100;
-    setAllocatedAmountUsd(String(targetAmount));
+    const normalizedForm = { ...form, coin: form.coin.trim().toUpperCase(), setupType: resolvedSetup };
+    setForm(normalizedForm);
+    setResult(analyzeSimilarTrades(normalizedForm, trades));
     setView("result");
   };
 
-  const handleLogTrade = async () => {
-    if (!result) return;
-    if (result.presentation?.dominantState === "hard_reject") return;
-    const parsedAllocated = parseFloat(allocatedAmountUsd);
-    const allocationValue = Number.isFinite(parsedAllocated) && parsedAllocated > 0 ? parsedAllocated : undefined;
-
-    const loggedAt = new Date().toISOString();
-    await addTrade({
-      ...form,
-      ...result,
-      allocatedAmountUsd: allocationValue,
-      id: `t-${Date.now()}`,
-      createdAt: loggedAt,
-    });
+  const resetForm = () => {
     setForm(DEFAULTS);
+    setCustomSetup("");
     setResult(null);
-    setAllocatedAmountUsd("");
+    setAmountUsd("");
+    setCapitalPct("");
     setView("form");
+  };
+
+  const parsedAmountUsd = parseFloat(amountUsd);
+  const parsedCapitalPct = parseFloat(capitalPct);
+  const allocatedAmountUsd = Number.isFinite(parsedAmountUsd) && parsedAmountUsd > 0 ? parsedAmountUsd : undefined;
+
+  const handleAmountUsdChange = (raw: string) => {
+    setAmountUsd(raw);
+    const n = parseFloat(raw);
+    if (!raw.trim()) {
+      setCapitalPct("");
+      return;
+    }
+    if (liveCapital > 0 && Number.isFinite(n)) {
+      setCapitalPct(((n / liveCapital) * 100).toFixed(2));
+    }
+  };
+
+  const handleCapitalPctChange = (raw: string) => {
+    setCapitalPct(raw);
+    const n = parseFloat(raw);
+    if (!raw.trim()) {
+      setAmountUsd("");
+      return;
+    }
+    if (liveCapital > 0 && Number.isFinite(n)) {
+      setAmountUsd(((n / 100) * liveCapital).toFixed(2));
+    }
+  };
+
+  const tradePayload = () => ({
+    ...form,
+    ...result!,
+    scoreBreakdown: {
+      ...result!.scoreBreakdown,
+      accountCapitalAtEntryUsd: liveCapital,
+      ...(Number.isFinite(parsedCapitalPct) ? { allocatedCapitalPct: parsedCapitalPct } : {}),
+    },
+    allocatedAmountUsd,
+    id: `t-${Date.now()}`,
+    createdAt: new Date().toISOString(),
+  });
+
+  const saveJournal = async () => {
+    if (!result) return;
+    await addTrade(tradePayload());
+    resetForm();
     setLocation("/journal");
   };
 
-  const handleAddToWatchlist = async () => {
+  const saveWatchlist = async () => {
     if (!result) return;
-    const savedAt = new Date().toISOString();
+    const createdAt = new Date().toISOString();
     await addToWatchlist({
       ...form,
       ...result,
+      scoreBreakdown: { ...result.scoreBreakdown, accountCapitalAtEntryUsd: liveCapital },
       id: `w-${Date.now()}`,
-      createdAt: savedAt,
+      createdAt,
     });
-    setForm(DEFAULTS);
-    setResult(null);
-    setAllocatedAmountUsd("");
-    setView("form");
+    resetForm();
     setLocation("/watchlist");
   };
 
-  const handleDiscard = () => {
-    setView("form");
-    setResult(null);
-  };
-
-  if (view === "result" && result) {
-    const capital = settings.totalCapital;
-    const allocationBandByStatus: Record<string, { min: number; max: number }> = {
-      "Standard Trade": { min: 10, max: 18 },
-      "High Conviction Trade": { min: 20, max: 35 },
-      "Expansion Trade": { min: 35, max: 60 },
-      "Balanced Trade": { min: 10, max: 18 },
-      "Aggressive Trade": { min: 20, max: 35 },
-      "Asymmetric Swing Trade": { min: 35, max: 60 },
-    };
-    const allocationBand = allocationBandByStatus[result.tradeStatus];
-    const minAllocationUsd = allocationBand ? Math.round(capital * (allocationBand.min / 100) * 100) / 100 : 0;
-    const maxAllocationUsd = allocationBand ? Math.round(capital * (allocationBand.max / 100) * 100) / 100 : 0;
+  if (view === "result" && result?.historicalSnapshot) {
+    const s = result.historicalSnapshot;
 
     return (
-      <div className="p-6 space-y-5 max-w-3xl mx-auto">
+      <div className="p-6 space-y-5 max-w-4xl mx-auto">
         <button
           type="button"
           className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
-          onClick={handleDiscard}
+          onClick={() => setView("form")}
         >
           <ArrowLeft size={12} />
           Back to form
@@ -243,34 +261,117 @@ export default function TradeEntry() {
 
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-sm font-semibold text-muted-foreground">Decision terminal</h1>
+            <h1 className="text-sm font-semibold">Historical Insight</h1>
             <p className="text-xs text-muted-foreground mt-0.5 font-mono">
-              {form.coin} / {form.setupType} / {form.marketCapTier}
+              {form.coin} / {form.setupType} / {form.timeframe}
             </p>
           </div>
           <CapitalSummary />
         </div>
 
-        {result.presentation ? (
-          <DecisionTerminal
-            form={form}
-            result={result}
-            presentation={result.presentation}
-            capital={capital}
-            minAllocationUsd={minAllocationUsd}
-            maxAllocationUsd={maxAllocationUsd}
-            allocatedAmountUsd={allocatedAmountUsd}
-            setAllocatedAmountUsd={setAllocatedAmountUsd}
-            onLogTrade={handleLogTrade}
-            onWatchlist={handleAddToWatchlist}
-            onDiscard={handleDiscard}
-          />
-        ) : null}
+        <section className="border border-border rounded-sm p-4 space-y-4">
+          <div className="section-label">Historical Matches</div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <Stat label="Similar Trades Found" value={String(s.similarTradesFound)} />
+            <Stat label="Average Similarity" value={pct(s.averageSimilarityPct)} />
+          </div>
+        </section>
+
+        <section className="border border-border rounded-sm p-4 space-y-4">
+          <div className="section-label">Similarity Breakdown</div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <Stat label="Near Matches" value={String(s.nearMatches)} />
+            <Stat label="Strong Matches" value={String(s.strongMatches)} />
+            <Stat label="Loose Matches" value={String(s.looseMatches)} />
+          </div>
+        </section>
+
+        <section className="border border-border rounded-sm p-4 space-y-4">
+          <div className="section-label">Historical Performance</div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            <Stat label="Historical Win Rate" value={pct(s.historicalWinRate)} />
+            <Stat label="Historical Breakeven Rate" value={pct(s.historicalBreakevenRate)} />
+            <Stat label="Historical Loss Rate" value={pct(s.historicalLossRate)} />
+            <Stat label="Average Return" value={pct(s.averageReturnPct, true)} color={tone(s.averageReturnPct)} />
+            <Stat label="Best Historical Trade" value={s.bestHistoricalTradePct == null ? "-" : pct(s.bestHistoricalTradePct, true)} color="text-green-400" />
+            <Stat label="Worst Historical Trade" value={s.worstHistoricalTradePct == null ? "-" : pct(s.worstHistoricalTradePct, true)} color="text-red-400" />
+          </div>
+        </section>
+
+        <section className="border border-border rounded-sm p-4 space-y-4">
+          <div className="section-label">Expected Outcome</div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <Stat label="Expected Return" value={pct(s.expectedReturnPct, true)} color={tone(s.expectedReturnPct)} />
+            <Stat label="Weighted Historical Win Rate" value={pct(s.weightedHistoricalWinRate)} />
+            <Stat label="Confidence Level" value={s.confidenceLevel} />
+          </div>
+        </section>
+
+        <section className="border border-border rounded-sm p-4 space-y-4">
+          <div className="section-label">Position Size</div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <Label text="Amount (USD)" />
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                className="w-full bg-background border border-border rounded-sm px-3 py-2.5 text-sm font-mono text-foreground focus:outline-none focus:border-ring"
+                placeholder={`e.g. ${(liveCapital * 0.1).toFixed(0)}`}
+                value={amountUsd}
+                onChange={(e) => handleAmountUsdChange(e.target.value)}
+              />
+            </div>
+            <div>
+              <Label text="Capital %" />
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                max="100"
+                className="w-full bg-background border border-border rounded-sm px-3 py-2.5 text-sm font-mono text-foreground focus:outline-none focus:border-ring"
+                placeholder="e.g. 10"
+                value={capitalPct}
+                onChange={(e) => handleCapitalPctChange(e.target.value)}
+              />
+              <p className="text-[10px] text-muted-foreground mt-1.5 font-mono">
+                Based on ${liveCapital.toLocaleString(undefined, { maximumFractionDigits: 0 })} live capital
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <div className="flex gap-2 w-full pt-1">
+          <button
+            type="button"
+            style={{ flex: "70 70 0%" }}
+            className="py-3.5 text-sm font-semibold font-mono rounded-sm bg-emerald-600/80 text-white hover:bg-emerald-600 transition-colors"
+            onClick={saveJournal}
+          >
+            Log Trade
+          </button>
+          <button
+            type="button"
+            title="Save to Watchlist"
+            aria-label="Save to Watchlist"
+            style={{ flex: "5 5 0%" }}
+            className="py-3.5 flex items-center justify-center border border-border rounded-sm text-muted-foreground hover:text-foreground hover:border-ring transition-colors min-w-12"
+            onClick={saveWatchlist}
+          >
+            <Tag size={18} strokeWidth={1.75} />
+          </button>
+          <button
+            type="button"
+            style={{ flex: "25 25 0%" }}
+            className="py-3.5 text-sm font-mono border border-border rounded-sm text-muted-foreground hover:text-foreground hover:border-ring transition-colors"
+            onClick={resetForm}
+          >
+            Discard
+          </button>
+        </div>
       </div>
     );
   }
-
-  const rr = weightedRr(form);
 
   return (
     <div className="p-6 space-y-4 w-full min-w-0">
@@ -280,7 +381,7 @@ export default function TradeEntry() {
       </div>
 
       <div className="space-y-5 w-full">
-        <SectionDivider label="A — Trade Identity" />
+        <SectionDivider label="Basic Info" />
         <div className={FORM_GRID}>
           <div>
             <Label text="Coin / Pair" />
@@ -291,75 +392,50 @@ export default function TradeEntry() {
               onChange={(e) => set("coin", e.target.value.toUpperCase())}
             />
           </div>
-          <Select label="Setup Type" value={form.setupType} onChange={(v) => set("setupType", v as SetupType)} options={["Breakout Retest", "Double Bottom", "Trend Continuation", "Trendline Reclaim"]} />
-          <Select label="Narrative Category" value={form.narrativeCategory} onChange={(v) => set("narrativeCategory", v as NarrativeCategory)} options={["AI", "DeFi", "Gaming", "Meme", "Layer 1", "Layer 2", "RWA", "Other"]} />
-        </div>
-        <div className={FORM_GRID}>
-          <Select label="Market Cap Tier" value={form.marketCapTier} onChange={(v) => set("marketCapTier", v as MarketCapTier)} options={["Small Cap", "Mid Cap", "Large Cap"]} />
-        </div>
-
-        <SectionDivider label="B — Market Regime" />
-        <div className={FORM_GRID}>
-          <Select label="BTC Trend" value={form.btcTrend} onChange={(v) => set("btcTrend", v as MarketTrend)} options={MARKET_TREND_OPTIONS} />
-          <Select label="Alts Trend" value={form.altTrend} onChange={(v) => set("altTrend", v as MarketTrend)} options={MARKET_TREND_OPTIONS} />
-          <Select label="BTC Volatility" value={form.btcVolatilityState} onChange={(v) => set("btcVolatilityState", v as BtcVolatilityState)} options={["Calm", "Elevated", "Violent"]} />
-        </div>
-        <div className={FORM_GRID}>
-          <Select label="Narrative Heat" value={form.narrativeHeat} onChange={(v) => set("narrativeHeat", v as NarrativeHeat)} options={["Dead", "Weak", "Active", "Hot", "Euphoric"]} />
+          <Select label="Setup Type" value={SETUPS.includes(form.setupType as never) ? form.setupType : "Other"} onChange={(v) => set("setupType", v as SetupType)} options={SETUPS} />
+          {form.setupType === "Other" && (
+            <div>
+              <Label text="Other Setup Type" />
+              <input
+                className="w-full bg-background border border-border rounded-sm px-3 py-2 text-sm font-mono text-foreground focus:outline-none focus:border-ring"
+                value={customSetup}
+                onChange={(e) => setCustomSetup(e.target.value)}
+              />
+            </div>
+          )}
+          <Select label="Market Cap Tier" value={form.marketCapTier} onChange={(v) => set("marketCapTier", v as MarketCapTier)} options={MARKET_CAPS} />
+          <Select label="Timeframe" value={form.timeframe} onChange={(v) => set("timeframe", v as TradeTimeframe)} options={TIMEFRAMES} />
         </div>
 
-        <SectionDivider label="C — Token Structure" />
+        <SectionDivider label="Market Conditions" />
         <div className={FORM_GRID}>
-          <Select label="Higher TF Structure" value={form.tokenHigherTfStructure} onChange={(v) => set("tokenHigherTfStructure", v as TokenMarketStructure)} options={TOKEN_STRUCTURE_OPTIONS} />
-          <Select label="Mid TF Structure" value={form.tokenMidTfStructure} onChange={(v) => set("tokenMidTfStructure", v as TokenMarketStructure)} options={TOKEN_STRUCTURE_OPTIONS} />
-          <Select label="Lower TF Structure" value={form.tokenLowerTfStructure} onChange={(v) => set("tokenLowerTfStructure", v as TokenMarketStructure)} options={TOKEN_STRUCTURE_OPTIONS} />
+          <Select label="BTC Condition" value={form.btcTrend} onChange={(v) => set("btcTrend", v as MarketTrend)} options={MARKET_TRENDS} />
+          <Select label="Alt Market Condition" value={form.altTrend} onChange={(v) => set("altTrend", v as MarketTrend)} options={MARKET_TRENDS} />
+          <Select label="Narrative Strength" value={form.narrativeHeat} onChange={(v) => set("narrativeHeat", v as NarrativeHeat)} options={NARRATIVE_STRENGTH} />
+          <Select label="Narrative Category" value={form.narrativeCategory} onChange={(v) => set("narrativeCategory", v as NarrativeCategory)} options={NARRATIVE_CATEGORIES} />
         </div>
 
-        <SectionDivider label="D — Momentum" />
-        <div className={FORM_GRID}>
-          <Select label="Volume State" value={form.volumeState} onChange={(v) => set("volumeState", v as VolumeState)} options={["Weak", "Normal", "Expansion", "Extreme Expansion"]} />
-          <Select label="Relative Volume" value={form.relativeVolume} onChange={(v) => set("relativeVolume", v as RelativeVolume)} options={["Below Average", "Average", "High", "Extreme"]} />
-          <Select label="Post Breakout" value={form.postBreakoutBehavior} onChange={(v) => set("postBreakoutBehavior", v as PostBreakoutBehavior)} options={["Immediate Continuation", "Holding", "Stalling", "Failing"]} />
-        </div>
-
-        <SectionDivider label="E — Entry & Execution" />
+        <SectionDivider label="Trade Plan" />
         <div className={FORM_GRID}>
           <NumberInput label="Stop Loss %" value={form.stopLossPct} onChange={(v) => set("stopLossPct", v ?? 0)} placeholder="2.5" />
           <NumberInput label="TP1 %" value={form.tp1Pct} onChange={(v) => set("tp1Pct", v)} optional placeholder="5" />
+          <NumberInput label="TP1 Allocation %" value={form.tp1PositionPct} onChange={(v) => set("tp1PositionPct", v ?? 0)} step="1" />
           <NumberInput label="TP2 %" value={form.tp2Pct} onChange={(v) => set("tp2Pct", v)} optional placeholder="10" />
-        </div>
-        <div className={FORM_GRID}>
+          <NumberInput label="TP2 Allocation %" value={form.tp2PositionPct} onChange={(v) => set("tp2PositionPct", v ?? 0)} step="1" />
           <NumberInput label="TP3 %" value={form.tp3Pct} onChange={(v) => set("tp3Pct", v)} optional placeholder="15" />
-          <NumberInput label="TP1 Position %" value={form.tp1PositionPct} onChange={(v) => set("tp1PositionPct", v ?? 0)} placeholder="40" step="1" />
-          <NumberInput label="TP2 Position %" value={form.tp2PositionPct} onChange={(v) => set("tp2PositionPct", v ?? 0)} placeholder="40" step="1" />
-        </div>
-        <div className={FORM_GRID}>
-          <NumberInput label="TP3 Position %" value={form.tp3PositionPct} onChange={(v) => set("tp3PositionPct", v ?? 0)} placeholder="20" step="1" />
-          <Select label="Entry Location" value={form.entryLocation} onChange={(v) => set("entryLocation", v as EntryLocation)} options={["At Key Level", "Slightly Extended", "Chased"]} />
+          <NumberInput label="TP3 Allocation %" value={form.tp3PositionPct} onChange={(v) => set("tp3PositionPct", v ?? 0)} step="1" />
           <div className="border border-border rounded-sm px-3 py-2 text-xs font-mono text-muted-foreground flex items-center">
-            Weighted RR: {rr > 0 ? `${rr.toFixed(2)}R` : "Add targets"}
+            RR: {rr > 0 ? `${rr.toFixed(2)}R` : "Add targets"}
           </div>
         </div>
 
-        <SectionDivider label="F — Risk Stack" />
-        <div className={FORM_GRID}>
-          <Select label="Overextension" value={form.overextension} onChange={(v) => set("overextension", v as Overextension)} options={["Calm", "Extended", "Euphoric"]} />
-          <Select label="Event Risk" value={form.eventRisk} onChange={(v) => set("eventRisk", v as EventRisk)} options={["Low", "Medium", "High"]} />
-          <Select label="Liquidity Stability" value={form.liquidityStability} onChange={(v) => set("liquidityStability", v as LiquidityStability)} options={["Stable", "Moderate", "Thin", "Dangerous"]} />
-        </div>
-
-        <SectionDivider label="G — Trade Management" />
-        <div className={FORM_GRID}>
-          <Select label="Move SL Rule" value={form.moveSlRule} onChange={(v) => set("moveSlRule", v as MoveSlRule)} options={["Never", "After TP1", "After Structure Shift", "Manual"]} />
-          <Select label="Invalidation Type" value={form.invalidationType} onChange={(v) => set("invalidationType", v as InvalidationType)} options={["Structure Loss", "Support Loss", "Volume Failure", "BTC Weakness"]} />
-        </div>
-
+        <SectionDivider label="Notes" />
         <div>
-          <Label text="Raw Observation Notes (optional)" />
+          <Label text="Entry Notes" />
           <textarea
             className="w-full bg-background border border-border rounded-sm px-3 py-2 text-sm font-mono text-foreground placeholder-muted-foreground focus:outline-none focus:border-ring resize-none"
-            rows={3}
-            placeholder="Structure notes, orderflow observations..."
+            rows={4}
+            placeholder="Entry context, chart notes, plan..."
             value={form.notes}
             onChange={(e) => set("notes", e.target.value)}
           />
@@ -367,14 +443,12 @@ export default function TradeEntry() {
 
         <button
           className={`w-full py-2.5 text-sm font-mono rounded-sm transition-opacity ${
-            !validForm
-              ? "bg-muted text-muted-foreground cursor-not-allowed"
-              : "bg-foreground text-background hover:opacity-90"
+            !validForm ? "bg-muted text-muted-foreground cursor-not-allowed" : "bg-foreground text-background hover:opacity-90"
           }`}
-          onClick={handleScore}
+          onClick={handleSubmit}
           disabled={!validForm}
         >
-          Score Setup
+          Submit Trade
         </button>
       </div>
     </div>

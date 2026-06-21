@@ -41,6 +41,14 @@ function tagList(tags: unknown): string[] {
   return [];
 }
 
+function accountCapitalAtEntry(trade: Trade, fallback: number): number {
+  const breakdown = typeof trade.scoreBreakdown === "object" && trade.scoreBreakdown != null
+    ? trade.scoreBreakdown
+    : undefined;
+  const capital = Number(breakdown?.accountCapitalAtEntryUsd);
+  return Number.isFinite(capital) && capital > 0 ? capital : fallback;
+}
+
 function fmtPct(value: number, signed = false) {
   const prefix = signed && value > 0 ? "+" : "";
   return `${prefix}${value.toFixed(2)}%`;
@@ -130,6 +138,45 @@ function setupAnalytics(closed: Trade[]) {
     .sort((a, b) => b.pnlUsd - a.pnlUsd);
 }
 
+function groupAnalytics(closed: Trade[], getKey: (trade: Trade) => string) {
+  const grouped: Record<string, { trades: number; wins: number; losses: number; returns: number[] }> = {};
+  for (const trade of closed) {
+    const key = getKey(trade) || "Unclassified";
+    if (!grouped[key]) grouped[key] = { trades: 0, wins: 0, losses: 0, returns: [] };
+    grouped[key].trades++;
+    grouped[key].returns.push(trade.actualPnlPct ?? 0);
+    if (trade.outcome === "win") grouped[key].wins++;
+    if (trade.outcome === "loss") grouped[key].losses++;
+  }
+  return Object.entries(grouped)
+    .map(([name, data]) => {
+      const decided = data.wins + data.losses;
+      return {
+        name,
+        trades: data.trades,
+        winRate: decided ? (data.wins / decided) * 100 : 0,
+        averageReturn: avg(data.returns),
+      };
+    })
+    .sort((a, b) => b.averageReturn - a.averageReturn);
+}
+
+function GroupTable({ rows }: { rows: ReturnType<typeof groupAnalytics> }) {
+  if (rows.length === 0) return <Empty height={140} />;
+  return (
+    <div className="space-y-2">
+      {rows.map((row) => (
+        <div key={row.name} className="grid grid-cols-[1fr_58px_74px_82px] gap-3 items-center text-xs font-mono border-b border-border/70 pb-2 last:border-0 last:pb-0">
+          <span className="text-foreground truncate">{row.name}</span>
+          <span className="text-muted-foreground text-right">{row.trades}</span>
+          <span className="text-muted-foreground text-right">{row.winRate.toFixed(1)}%</span>
+          <span className={`text-right ${tone(row.averageReturn)}`}>{fmtPct(row.averageReturn, true)}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function Analytics() {
   const { trades } = useTrades();
   const { settings } = useSettings();
@@ -152,7 +199,10 @@ export default function Analytics() {
   const avgRr = avg(closed.map((t) => t.suggestedRr ?? 0).filter((value) => value > 0));
   const avgCapitalRiskPct = avg(
     closed
-      .map((t) => ((t.suggestedAllocationPct ?? 0) * (t.suggestedSlPct ?? t.stopLossPct ?? 0)) / 100)
+      .map((t) => {
+        const denominator = accountCapitalAtEntry(t, settings.totalCapital);
+        return t.allocatedAmountUsd != null && denominator > 0 ? (t.allocatedAmountUsd / denominator) * 100 : 0;
+      })
       .filter((value) => value > 0),
   );
   const expectancyPct = decided > 0
@@ -172,6 +222,9 @@ export default function Analytics() {
   const returnCurve = buildTradingReturnPctCurve(closedChrono);
   const setupData = setupAnalytics(closed);
   const setupBarProps = chartBarXAxisProps(setupData.length);
+  const setupRows = groupAnalytics(closed, (trade) => trade.setupType);
+  const capRows = groupAnalytics(closed, (trade) => trade.marketCapTier ?? "Unclassified");
+  const narrativeRows = groupAnalytics(closed, (trade) => trade.narrativeCategory ?? "Unclassified");
 
   const mistakeFreq: Record<string, number> = {};
   for (const trade of trades) {
@@ -244,7 +297,7 @@ export default function Analytics() {
             <MetricRow label="Average win" value={`+${avgWinPct.toFixed(2)}%`} color="text-green-400" />
             <MetricRow label="Average loss" value={`-${avgLossPct.toFixed(2)}%`} color="text-red-400" />
             <MetricRow label="Average RR" value={avgRr > 0 ? `${avgRr.toFixed(2)}:1` : "-"} />
-            <MetricRow label="Average capital risk" value={`${avgCapitalRiskPct.toFixed(2)}%`} />
+            <MetricRow label="Average position size" value={`${avgCapitalRiskPct.toFixed(2)}%`} />
             <MetricRow label="Closed sample" value={`${closed.length} trades`} />
           </div>
         </Panel>
@@ -294,20 +347,18 @@ export default function Analytics() {
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-        <Panel title="Best / Worst Setups" subtitle="Realized dollars by setup type">
-          {setupData.length > 0 ? (
-            <div className="space-y-2">
-              {setupData.map((setup) => (
-                <div key={setup.setup} className="grid grid-cols-[1fr_80px_80px] gap-3 items-center text-xs font-mono border-b border-border/70 pb-2 last:border-0 last:pb-0">
-                  <span className="text-foreground truncate">{setup.setup}</span>
-                  <span className="text-muted-foreground text-right">{setup.count} trades</span>
-                  <span className={`text-right ${tone(setup.pnlUsd)}`}>{fmtUsd(setup.pnlUsd)}</span>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <Empty height={140} />
-          )}
+        <Panel title="Setup Type" subtitle="Trades, win rate, and average return">
+          <GroupTable rows={setupRows} />
+        </Panel>
+
+        <Panel title="Market Cap Tier" subtitle="Trades, win rate, and average return">
+          <GroupTable rows={capRows} />
+        </Panel>
+      </div>
+
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+        <Panel title="Narrative Category" subtitle="Trades, win rate, and average return">
+          <GroupTable rows={narrativeRows} />
         </Panel>
 
         <Panel title="Mistake Frequency" subtitle="Most common tagged execution errors">

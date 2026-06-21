@@ -66,7 +66,7 @@ export function runHardFilterEngine(input: EngineTradeInput): HardFilterOutcome 
     traces.push({
       ruleId: "H2",
       action: "reject",
-      detail: "Rejected: weak confirmation and unclear structure.",
+      detail: "Rejected: weak confirmation and unclear token structure.",
     });
     return finish();
   }
@@ -76,7 +76,7 @@ export function runHardFilterEngine(input: EngineTradeInput): HardFilterOutcome 
     traces.push({
       ruleId: "H2B",
       action: "reject",
-      detail: "Rejected: key level is lost.",
+      detail: "Rejected: lower-timeframe token structure is bearish.",
     });
     return finish();
   }

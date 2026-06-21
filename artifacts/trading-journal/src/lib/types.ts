@@ -1,8 +1,7 @@
-import type { DecisionPresentation } from "@workspace/trading-engine";
-
-export type SetupType = "Breakout Retest" | "Double Bottom" | "Trendline Reclaim" | "Trend Continuation";
-export type NarrativeCategory = "AI" | "DeFi" | "Gaming" | "Meme" | "Layer 1" | "Layer 2" | "RWA" | "Other";
-export type MarketCapTier = "Small Cap" | "Mid Cap" | "Large Cap";
+export type SetupType = "Breakout Retest" | "Double Bottom" | "Trendline Reclaim" | "Trend Continuation" | "Other" | (string & {});
+export type NarrativeCategory = "AI" | "DeFi" | "RWA" | "Infrastructure" | "Gaming" | "Meme" | "Other" | (string & {});
+export type MarketCapTier = "Micro Cap" | "Small Cap" | "Mid Cap" | "Large Cap";
+export type TradeTimeframe = "Weekly" | "Daily" | "4H" | "1H" | (string & {});
 /** Five-point BTC / alts regime trend */
 export type MarketTrend =
   | "Extreme Bullish"
@@ -13,7 +12,7 @@ export type MarketTrend =
 /** Token market structure on a single timeframe */
 export type TokenMarketStructure = "Bullish" | "Ranging" | "Bearish";
 export type BtcVolatilityState = "Calm" | "Elevated" | "Violent";
-export type NarrativeHeat = "Dead" | "Weak" | "Active" | "Hot" | "Euphoric";
+export type NarrativeHeat = "Dead" | "Weak" | "Neutral" | "Active" | "Hot" | "Euphoric";
 /** @deprecated Legacy rows only */
 export type StructureBias = "Bullish" | "Neutral" | "Bearish";
 /** @deprecated Legacy rows only */
@@ -50,16 +49,7 @@ export type PrimaryMistakeTag =
   | "No Clear Structure"
   | "Overtrading";
 
-export type TradeStatus =
-  | "Reject Trade"
-  | "Watchlist Only"
-  | "Standard Trade"
-  | "High Conviction Trade"
-  | "Expansion Trade"
-  /** Legacy rows saved before engine v3 */
-  | "Balanced Trade"
-  | "Aggressive Trade"
-  | "Asymmetric Swing Trade";
+export type TradeStatus = "Historical Insight" | "Legacy" | (string & {});
 export type TradeOutcome = "win" | "loss" | "breakeven";
 
 export interface TradeInput {
@@ -67,6 +57,7 @@ export interface TradeInput {
   setupType: SetupType;
   narrativeCategory: NarrativeCategory;
   marketCapTier: MarketCapTier;
+  timeframe: TradeTimeframe;
   btcTrend: MarketTrend;
   altTrend: MarketTrend;
   btcVolatilityState: BtcVolatilityState;
@@ -111,7 +102,6 @@ export interface TradeInput {
   reclaimStatus?: ReclaimStatus;
   htfLocation?: HtfLocation;
   lowerTfEntryStructure?: LowerTfEntryStructure;
-  timeframe?: string;
   btcCondition?: string;
   altCondition?: string;
   narrativeStrength?: string;
@@ -128,6 +118,7 @@ export interface TradeInput {
 }
 
 export interface ScoreResult {
+  historicalSnapshot?: HistoricalSnapshot;
   finalScore: number;
   tradeStatus: TradeStatus;
   suggestedAllocationPct: number;
@@ -138,10 +129,28 @@ export interface ScoreResult {
   finalDecision: string;
   /** When this score was produced (ISO). Shown on the decision screen. */
   scoredAt?: string;
-  /** Rich institutional-style decision terminal payload (missing on very old saved rows) */
-  presentation?: DecisionPresentation;
+  /** Legacy engine payload, missing on similarity-based rows */
+  presentation?: unknown;
   /** Raw persisted engine diagnostics for details after reload. */
   scoreBreakdown?: Record<string, unknown>;
+}
+
+export interface HistoricalSnapshot {
+  similarTradesFound: number;
+  averageSimilarityPct: number;
+  nearMatches: number;
+  strongMatches: number;
+  looseMatches: number;
+  historicalWinRate: number;
+  historicalBreakevenRate: number;
+  historicalLossRate: number;
+  averageReturnPct: number;
+  bestHistoricalTradePct: number | null;
+  worstHistoricalTradePct: number | null;
+  expectedReturnPct: number;
+  weightedHistoricalWinRate: number;
+  confidenceLevel: "Low Confidence" | "Medium Confidence" | "High Confidence" | "Very High Confidence";
+  generatedAt: string;
 }
 
 export interface Trade extends TradeInput, ScoreResult {

@@ -14,71 +14,57 @@ import {
 import CapitalSummary from "@/components/CapitalSummary";
 
 const CLASSIFICATIONS = [
-  { range: "0-44", label: "Reject Trade", note: "No deployment. Hard filters can force reject even if the raw score is higher." },
-  { range: "45-59", label: "Watchlist Only", note: "Track the idea, but wait for better tape, structure, or risk conditions." },
-  { range: "60-74", label: "Standard Trade", note: "Deployable base class. Nonlinear allocation band: 10-18% of equity." },
-  { range: "75-87", label: "High Conviction Trade", note: "Stronger opportunity. Nonlinear allocation band: 20-35% of equity." },
-  { range: "88-100", label: "Expansion Trade", note: "Top tier. Band: 35-60%, only when expansion gates and synergy rules allow it." },
+  { range: "85%+", label: "Near Matches", note: "Closest historical context. These trades carry the most statistical relevance." },
+  { range: "70-84%", label: "Strong Matches", note: "Useful historical context with several matching conditions." },
+  { range: "55-69%", label: "Loose Matches", note: "Included with low influence because similarity weighting reduces weak matches." },
+  { range: "<55%", label: "Ignored", note: "Excluded from expected outcome calculations." },
 ];
 
 const PIPELINE_STEPS = [
-  "Hard filters run first and can reject, force watchlist, cap classification, or compress aggression.",
-  "Five base layers are scored on a 0-100 execution scale using the active factor weights.",
-  "Conditional rules and synergy clusters adjust the base score, eligibility, and allocation ceiling.",
-  "Risk compression applies when score is uncertain, BTC and alts disagree, or risk blend is negative.",
-  "Classification maps the post-filter score into Reject, Watchlist, Standard, High Conviction, or Expansion.",
-  "Expansion requires synergy eligibility plus structure >80 and momentum >75.",
-  "Allocation uses a nonlinear power curve, then applies structure governance, compression, and RR scaling.",
-  "RR engine and warnings explain whether execution is clean, cautious, blocked, or hard rejected.",
+  "The app compares the new trade against closed journal trades only.",
+  "Similarity uses setup, timeframe, BTC condition, alt condition, narrative strength, narrative category, and market cap tier.",
+  "Each historical trade receives a 0-100% similarity value.",
+  "Matches below 55% are ignored.",
+  "Expected return and weighted win rate use similarity squared, so closer matches matter more.",
+  "The historical snapshot is stored with the trade when it is journaled.",
 ];
 
 const LAYERS = [
-  { label: "Structure", weight: "35%", note: "Retest confirmation 40%, level clarity 35%, HTF alignment 25%. Setup type is used by hard filters and modifiers.", icon: PieChart },
-  { label: "Market", weight: "25%", note: "BTC trend 45%, alt-market trend 35%, narrative strength 20%.", icon: Activity },
-  { label: "Momentum", weight: "20%", note: "Volume quality 40%, candle strength 35%, follow-through 25%.", icon: Activity },
-  { label: "Entry", weight: "15%", note: "Entry distance 35%, clean space to resistance 40%, RR quality 25%.", icon: Crosshair },
-  { label: "Risk", weight: "5%", note: "Overextension 45%, event risk 35%, liquidity risk 20%. Negative risk compresses size.", icon: ShieldAlert },
+  { label: "Setup Type", weight: "30", note: "Breakout Retest, Double Bottom, Trend Continuation, Trendline Reclaim, or custom setup.", icon: PieChart },
+  { label: "Timeframe", weight: "20", note: "Weekly, Daily, 4H, or 1H.", icon: Crosshair },
+  { label: "BTC Condition", weight: "15", note: "Extreme Bullish through Extreme Bearish.", icon: Activity },
+  { label: "Alt Condition", weight: "10", note: "Alt market context at trade entry.", icon: Activity },
+  { label: "Narrative Strength", weight: "10", note: "Dead, Weak, Neutral, Active, or Hot.", icon: ShieldAlert },
+  { label: "Narrative Category", weight: "5", note: "AI, DeFi, RWA, Infrastructure, Gaming, Meme, or Other.", icon: PieChart },
+  { label: "Market Cap Tier", weight: "10", note: "Micro, Small, Mid, or Large Cap.", icon: Crosshair },
 ];
 
 const DECISION_SCREEN = [
-  { state: "EXECUTE", note: "Approved path. Engine sees deployment as valid at the suggested allocation tier." },
-  { state: "EXECUTE CAUTIOUSLY", note: "Approved with compression. Sizing, RR, volatility, or market disagreement requires reduced aggression." },
-  { state: "WATCHLIST", note: "No deployment. Track the setup and wait for cleaner confirmation." },
-  { state: "BLOCKED", note: "Score is not enough. A rule or guardrail blocks normal execution." },
-  { state: "HARD REJECT", note: "A veto rule invalidated the setup before normal classification could matter." },
+  { state: "Historical Matches", note: "How many similar closed trades exist in your journal." },
+  { state: "Historical Performance", note: "Win rate, breakeven rate, loss rate, average return, best result, and worst result." },
+  { state: "Expected Outcome", note: "Expected return and weighted historical win rate using similarity squared." },
+  { state: "Confidence Level", note: "A simple label based on sample size and average similarity." },
 ];
 
 const HARD_FILTERS = [
-  { id: "H1", rule: "Bearish BTC + bearish alts + breakout retest", result: "Reject" },
-  { id: "H1B", rule: "Violent bearish BTC with unsafe breakout/reclaim context", result: "Reject" },
-  { id: "H2", rule: "Weak retest plus messy/forced level", result: "Reject" },
-  { id: "H2B", rule: "Key reclaim level lost or lower-timeframe structure bearish", result: "Reject" },
-  { id: "H3", rule: "Dangerous liquidity plus euphoric extension", result: "Reject" },
-  { id: "H4", rule: "Poor RR into nearby resistance", result: "Reject" },
-  { id: "H5", rule: "High event risk with weak momentum", result: "Watchlist only" },
-  { id: "H6", rule: "Neutral BTC, bearish alts, dead narrative", result: "Cap at Standard" },
-  { id: "H7", rule: "Violent BTC volatility", result: "Cautious only, allocation cap 12%" },
+  { id: "N1", rule: "The app does not judge whether a trade should be taken.", result: "Neutral" },
+  { id: "N2", rule: "TP and SL fields are used for planning and analytics, not similarity matching.", result: "Planning" },
+  { id: "N3", rule: "Open trades are journal records but do not affect historical performance until closed.", result: "Analytics" },
 ];
 
 const ALLOCATION_RULES = [
-  { label: "Standard Trade", value: "10-18%", note: "Base deployable band before compression and RR scaling." },
-  { label: "High Conviction", value: "20-35%", note: "Higher band, still subject to downgrade and compression checks." },
-  { label: "Expansion Trade", value: "35-60%", note: "Requires expansion eligibility, structure >80, and momentum >75." },
-  { label: "Curve", value: "power 1.35", note: "Higher scores scale allocation nonlinearly inside the active band." },
-  { label: "Structure caps", value: "55/72/88/100%", note: "Structure below 55, 70, or 80 reduces allowed aggression." },
-  { label: "Momentum haircut", value: "0.82x", note: "Momentum >80 with structure <70 is treated as isolated impulse." },
+  { label: "Formula", value: "similarity squared", note: "A 95% match gets 0.9025 weight; a 70% match gets 0.49 weight." },
+  { label: "Expected return", value: "weighted avg", note: "Historical returns are averaged using similarity weight." },
+  { label: "Weighted win rate", value: "weighted avg", note: "Wins from closer matches count more than loose matches." },
+  { label: "Snapshot", value: "frozen", note: "The output at entry time stays attached to the journal record." },
 ];
 
 const GUARDRAILS = [
-  "Final score is the post-filter execution score, not a simple average of the visible layer bars.",
-  "Reject and watchlist classifications always return 0% allocation.",
-  "Standard, High Conviction, and Expansion allocations are nonlinear, not score times a fixed percentage.",
-  "Structure governs aggression: weak structure can cap size even when momentum is strong.",
-  "Uncertainty band 50-65 applies 0.7x allocation compression.",
-  "BTC/alt trend disagreement can step the aggression class down by one tier.",
-  "Negative risk blend applies 0.75x allocation compression and tightens RR/TP expansion.",
-  "RR floor is dynamic: around 15% size asks for 5R, around 50% size asks for 2R.",
-  "Net capital is used for sizing hints; it does not directly change the score.",
+  "No verdict language is used.",
+  "No allocation is generated by the app.",
+  "Small samples should be treated as context, not certainty.",
+  "Historical output changes as your journal grows; saved snapshots do not change.",
+  "Average position size uses allocated dollars divided by the stored account capital snapshot when available.",
 ];
 
 export default function Settings() {
@@ -126,7 +112,7 @@ export default function Settings() {
           </div>
           <div>
             <h1 className="text-base font-semibold">Settings & Reference</h1>
-            <p className="text-xs text-muted-foreground mt-0.5">Configure capital and review the active v3 engine logic</p>
+            <p className="text-xs text-muted-foreground mt-0.5">Configure capital and review the historical similarity model</p>
           </div>
         </div>
         <CapitalSummary />
@@ -257,9 +243,9 @@ export default function Settings() {
       </div>
 
       <div className="space-y-4">
-        <div className="text-sm font-semibold px-1">Decision States</div>
+        <div className="text-sm font-semibold px-1">Insight Sections</div>
         <p className="text-xs text-muted-foreground px-1 leading-relaxed max-w-2xl">
-          The score screen headline is the real engine call. The score and layer bars explain the path, but the decision state controls deployment.
+          The output screen summarizes similar historical trades and probability-based context from your own journal.
         </p>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {DECISION_SCREEN.map(({ state, note }) => (
@@ -272,7 +258,7 @@ export default function Settings() {
       </div>
 
       <div className="space-y-4 pt-4">
-        <div className="text-sm font-semibold px-1">Engine Pipeline</div>
+        <div className="text-sm font-semibold px-1">Similarity Pipeline</div>
         <div className="p-5 border border-border/50 rounded-xl bg-card/10 space-y-1">
           {PIPELINE_STEPS.map((step, idx) => (
             <div key={step} className="flex items-start gap-3 p-2 rounded-lg hover:bg-background/50 transition-colors">
@@ -286,7 +272,7 @@ export default function Settings() {
       </div>
 
       <div className="space-y-4 pt-4">
-        <div className="text-sm font-semibold px-1">Score Buckets</div>
+        <div className="text-sm font-semibold px-1">Similarity Buckets</div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {CLASSIFICATIONS.map(({ range, label, note }) => (
             <div key={range} className="flex flex-col sm:flex-row gap-3 p-4 rounded-xl border border-border/50 bg-card/10 transition-colors hover:border-border/80">
@@ -303,7 +289,7 @@ export default function Settings() {
       </div>
 
       <div className="space-y-4 pt-4">
-        <div className="text-sm font-semibold px-1">Layer Weights</div>
+        <div className="text-sm font-semibold px-1">Similarity Weights</div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {LAYERS.map(({ label, weight, note, icon: Icon }) => (
             <div key={label} className="p-4 border border-border/50 rounded-xl bg-card/10 flex flex-col gap-3 transition-colors hover:border-border/80">
@@ -321,7 +307,7 @@ export default function Settings() {
       </div>
 
       <div className="space-y-4 pt-4">
-        <div className="text-sm font-semibold px-1">Hard Filters</div>
+        <div className="text-sm font-semibold px-1">Model Notes</div>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
           {HARD_FILTERS.map(({ id, rule, result }) => (
             <div key={id} className="p-4 border border-border/50 rounded-xl bg-card/10 space-y-2">
@@ -336,7 +322,7 @@ export default function Settings() {
       </div>
 
       <div className="space-y-4 pt-4">
-        <div className="text-sm font-semibold px-1">Allocation Engine</div>
+        <div className="text-sm font-semibold px-1">Weighted Outcome</div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {ALLOCATION_RULES.map(({ label, value, note }) => (
             <div key={label} className="grid grid-cols-[140px_90px_1fr] gap-3 p-4 border border-border/50 rounded-xl bg-card/10 text-xs">
@@ -349,7 +335,7 @@ export default function Settings() {
       </div>
 
       <div className="space-y-4 pt-4">
-        <div className="text-sm font-semibold px-1">Rules of Thumb</div>
+        <div className="text-sm font-semibold px-1">Reference Notes</div>
         <div className="p-5 border border-border/50 rounded-xl bg-card/10 space-y-1">
           {GUARDRAILS.map((note) => (
             <div key={note} className="flex items-start gap-3 p-2 rounded-lg hover:bg-background/50 transition-colors text-xs text-muted-foreground leading-relaxed">

@@ -45,17 +45,6 @@ export default function Dashboard() {
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
     .slice(0, 6);
 
-  const statusColor: Record<string, string> = {
-    "Expansion Trade": "text-green-400",
-    "High Conviction Trade": "text-green-400",
-    "Standard Trade": "text-foreground/70",
-    "Asymmetric Swing Trade": "text-green-400",
-    "Aggressive Trade": "text-green-400",
-    "Balanced Trade": "text-foreground/70",
-    "Watchlist Only": "text-yellow-500",
-    "Reject Trade": "text-red-400",
-  };
-
   const pctColor = (v: number) => (v > 0 ? "text-green-400" : v < 0 ? "text-red-400" : undefined);
   const closedLabel = `${wins.length}W/${losses.length}L${breakevens.length ? `/${breakevens.length}BE` : ""}/${open.length}O`;
 
@@ -169,18 +158,18 @@ export default function Dashboard() {
                   }`}
                 />
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 text-sm">
+                  <div className="flex items-center gap-2 text-sm flex-wrap">
                     <span className="font-mono font-medium">{t.coin}</span>
                     <span className="text-muted-foreground text-xs">{t.setupType}</span>
-                    <span className="text-muted-foreground text-xs">· {t.marketCapTier ?? t.timeframe ?? "Unclassified"}</span>
+                    <span className="text-muted-foreground text-xs">/ {t.marketCapTier ?? "Unclassified"}</span>
+                    <span className="text-muted-foreground text-xs">/ {t.timeframe ?? "-"}</span>
                   </div>
                   <div className="text-[10px] text-muted-foreground font-mono mt-0.5">
                     {formatTradeDateTime(t.createdAt)}
                   </div>
                 </div>
-                <div className="text-right shrink-0">
-                  <div className={`text-xs font-mono ${statusColor[t.tradeStatus] ?? ""}`}>{t.tradeStatus}</div>
-                  <div className="text-[10px] font-mono text-muted-foreground">{t.finalScore}/100</div>
+                <div className="text-right shrink-0 text-xs font-mono text-muted-foreground">
+                  {t.outcome ? "Closed" : "Open"}
                 </div>
                 {t.actualPnlPct != null && (
                   <div

@@ -92,7 +92,7 @@ export function mapLegacyJournalToEngine(input: {
       ? deriveSrClarity(input.breakoutState, input.reclaimStatus, input.htfLocation)
       : mapSr(input.levelClarity);
   const htfAlignment = hasNewTokenStructure
-    ? deriveAlignmentFromTrends(btcTrend, altTrend, input.tokenHigherTfStructure, input.tokenMidTfStructure)
+    ? deriveAlignmentFromTrends(input.tokenHigherTfStructure, input.tokenMidTfStructure, input.tokenLowerTfStructure)
     : hasLegacyMarketTf
       ? deriveAlignment(input.btcHigherTfStructure, input.altHigherTfStructure, input.altMidTfStructure)
       : mapHtf(input.timeframeAlignment);
@@ -580,20 +580,25 @@ function deriveRetestFromTokenStructure(
 }
 
 function deriveAlignmentFromTrends(
-  btcTrend: TrendScoreLabel,
-  altTrend: TrendScoreLabel,
   tokenHigher?: string,
   tokenMid?: string,
+  tokenLower?: string,
 ): EngineTradeInput["structure"]["htfAlignment"] {
-  const btcBull = btcTrend === "bullish" || btcTrend === "strong_bullish";
-  const altBull = altTrend === "bullish" || altTrend === "strong_bullish";
   const th = mapTokenStructure(tokenHigher);
   const tm = mapTokenStructure(tokenMid);
-  if (btcBull && altBull && th === "bullish" && tm === "bullish") return "full";
-  if (btcTrend === "bearish" || btcTrend === "strong_bearish" || altTrend === "bearish" || altTrend === "strong_bearish") {
+  const tl = mapTokenStructure(tokenLower);
+
+  // If Higher and Mid are bullish, we have full alignment (or partial if lower is ranging/bearish)
+  if (th === "bullish" && tm === "bullish") {
+    return tl === "bullish" ? "full" : "partial";
+  }
+  
+  // If there is any bearish structure on Higher or Mid TF, it's a conflict
+  if (th === "bearish" || tm === "bearish") {
     return "conflict";
   }
-  if (th === "bearish") return "conflict";
+
+  // Otherwise, if they are ranging or mixed, it's partial
   return "partial";
 }
 
@@ -822,8 +827,8 @@ export function toLegacyApiScore(
     expectedProfitPct,
     expectedLossPct,
     finalDecision: engine.approval.approved
-      ? `APPROVED — ${engine.classification.replace(/_/g, " ")}`
-      : `BLOCKED — ${engine.approval.reason}`,
+      ? `APPROVED - ${classificationToDisplayName(engine.classification)}`
+      : `BLOCKED - ${engine.approval.reason}`,
     engineVersion: engine.engineVersion,
     classification: engine.classification,
     approvalApproved: engine.approval.approved,

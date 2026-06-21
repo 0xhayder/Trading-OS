@@ -157,16 +157,17 @@ function pillarLines(input: EngineTradeInput): {
 } {
   return {
     structure: [
-      `Level clarity: ${input.structure.srClarity.replace(/_/g, " ")}`,
-      `Retest: ${input.structure.retestConfirmation}`,
       `Setup: ${input.structure.setupType.replace(/_/g, " ")}`,
-      `Timeframes: ${input.structure.htfAlignment.replace(/_/g, " ")}`,
+      `Token structure alignment: ${input.structure.htfAlignment.replace(/_/g, " ")}`,
+      `Confirmation quality: ${input.structure.retestConfirmation}`,
+      `Support/resistance clarity: ${input.structure.srClarity.replace(/_/g, " ")}`,
+      `Liquidity space: ${input.structure.liquiditySpace.replace(/_/g, " ")}`,
     ],
     momentum: [
-      `Volume bucket: ${input.momentum.relVolume.replace(/_/g, " ")}`,
+      `Volume / market-cap proxy: ${input.momentum.volumeToMcapRatio.toFixed(2)}`,
+      `Relative volume: ${input.momentum.relVolume.replace(/_/g, " ")}`,
       `Candle impulse: ${input.momentum.candleStrength}`,
-      `Follow-through: ${input.momentum.expansionVelocity}`,
-      `Narrative: ${input.market.narrative}`,
+      `Expansion velocity: ${input.momentum.expansionVelocity}`,
     ],
     marketRegime: [
       `BTC: ${input.market.btcTrend.replace(/_/g, " ")}`,
@@ -177,7 +178,8 @@ function pillarLines(input: EngineTradeInput): {
       `Extension: ${input.risk.overextension}`,
       `Liquidity: ${input.risk.liquidityRisk}`,
       `Events: ${input.risk.eventRisk}`,
-      `RR label: ${input.entry.rrQuality} · entry distance: ${input.entry.entryEfficiency}`,
+      `RR: ${input.entry.rrNumeric.toFixed(2)}R / ${input.entry.rrQuality}`,
+      `Entry: ${input.entry.entryEfficiency} / SL: ${input.entry.slEfficiency}`,
     ],
   };
 }
@@ -196,12 +198,12 @@ function capitalExposureQuality(engine: EngineScoreResult): string {
 
 function allocationClassLabel(engine: EngineScoreResult): string {
   if (!engine.approval.approved) return "None";
-  if (engine.classification === "expansion_trade") return "Asymmetric attack";
-  if (engine.classification === "high_conviction_trade") return "Conviction";
+  if (engine.classification === "expansion_trade") return "Asymmetric swing";
+  if (engine.classification === "high_conviction_trade") return "Aggressive";
   if (engine.classification === "standard_trade") {
-    return engine.aggressionLevel === "cautious" || engine.aggressionLevel === "none" ? "Defensive" : "Standard";
+    return engine.aggressionLevel === "cautious" || engine.aggressionLevel === "none" ? "Reduced balanced" : "Balanced";
   }
-  return "Defensive";
+  return "Watchlist";
 }
 
 function playbook(input: EngineTradeInput): { playbook: "continuation" | "mean_reversion" | "mixed"; note: string } {
@@ -224,8 +226,8 @@ function playbook(input: EngineTradeInput): { playbook: "continuation" | "mean_r
 }
 
 function holdHint(input: EngineTradeInput): string {
-  if (input.structure.htfAlignment === "full") return "If the trade works, plan for a longer hold when timeframes line up.";
-  if (input.structure.htfAlignment === "conflict") return "Shorter hold is more realistic until higher timeframes agree.";
+  if (input.structure.htfAlignment === "full") return "If the trade works, plan for a longer hold while token structure stays aligned.";
+  if (input.structure.htfAlignment === "conflict") return "Shorter hold is more realistic until token structure resolves.";
   return "Medium hold is typical here unless momentum clearly extends.";
 }
 

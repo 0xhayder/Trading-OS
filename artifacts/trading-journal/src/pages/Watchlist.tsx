@@ -33,7 +33,7 @@ export default function Watchlist() {
         <div>
           <h1 className="text-sm font-semibold">Watchlist</h1>
           <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
-            Saved observation setups. Click a row to inspect the full engine detail; press Edit only when you want to change outcome notes.
+            Saved observation setups. Click a row to inspect the trade detail; press Edit only when you want to change outcome notes.
           </p>
         </div>
         <CapitalSummary />
@@ -41,7 +41,7 @@ export default function Watchlist() {
 
       {watchlist.length === 0 ? (
         <div className="border border-border rounded-sm py-12 text-center text-xs text-muted-foreground">
-          No watchlist entries yet. Save one from the score result screen using Save to watchlist.
+          No watchlist entries yet. Save one from the historical insight screen.
         </div>
       ) : (
         <div className="border border-border rounded-sm overflow-hidden">
@@ -52,7 +52,7 @@ export default function Watchlist() {
                 <th className="px-3 py-2.5 text-left section-label">Coin</th>
                 <th className="px-3 py-2.5 text-left section-label">Setup</th>
                 <th className="px-3 py-2.5 text-left section-label">Tier</th>
-                <th className="px-3 py-2.5 text-left section-label">Score</th>
+                <th className="px-3 py-2.5 text-left section-label">Timeframe</th>
                 <th className="px-3 py-2.5 text-left section-label">Outcome</th>
                 <th className="px-3 py-2.5 text-left section-label"></th>
               </tr>
@@ -70,8 +70,8 @@ export default function Watchlist() {
                     </td>
                     <td className="px-3 py-2.5 font-mono text-sm font-medium">{w.coin}</td>
                     <td className="px-3 py-2.5 text-xs text-muted-foreground">{w.setupType}</td>
-                    <td className="px-3 py-2.5 font-mono text-xs text-muted-foreground">{w.marketCapTier ?? w.timeframe ?? "-"}</td>
-                    <td className="px-3 py-2.5 font-mono text-sm text-yellow-500">{w.finalScore}</td>
+                    <td className="px-3 py-2.5 font-mono text-xs text-muted-foreground">{w.marketCapTier ?? "-"}</td>
+                    <td className="px-3 py-2.5 font-mono text-xs text-muted-foreground">{w.timeframe ?? "-"}</td>
                     <td className="px-3 py-2.5 text-xs text-muted-foreground">{w.outcome ?? "Watching"}</td>
                     <td className="px-3 py-2.5">
                       <button
