@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 import { useLocation } from "wouter";
 import CapitalSummary from "@/components/CapitalSummary";
 import { analyzeSimilarTrades, weightedRr, type SimilarityResult } from "@/lib/scorer";
@@ -14,6 +14,7 @@ const NARRATIVE_STRENGTH = ["Dead", "Weak", "Neutral", "Active", "Hot"] as const
 const NARRATIVE_CATEGORIES = ["AI", "DeFi", "RWA", "Infrastructure", "Gaming", "Meme", "Other"] as const;
 const MARKET_CAPS = ["Micro Cap", "Small Cap", "Mid Cap", "Large Cap"] as const;
 const TIMEFRAMES = ["Weekly", "Daily", "4H", "1H"] as const;
+const RISK_OPTIONS = ["1", "2", "3", "Other"] as const;
 
 const DEFAULTS: TradeInput = {
   coin: "",
@@ -121,9 +122,9 @@ function NumberInput({
   );
 }
 
-function Stat({ label, value, color }: { label: string; value: string; color?: string }) {
+function Stat({ label, value, color }: { label: string; value: ReactNode; color?: string }) {
   return (
-    <div className="border border-border rounded-sm p-3">
+    <div className="min-w-0 border-l border-border/70 pl-3 py-1">
       <div className="section-label mb-1">{label}</div>
       <div className={`font-mono text-lg font-semibold ${color ?? "text-foreground"}`}>{value}</div>
     </div>
@@ -146,8 +147,8 @@ export default function TradeEntry() {
   const [customSetup, setCustomSetup] = useState("");
   const [view, setView] = useState<View>("form");
   const [result, setResult] = useState<SimilarityResult | null>(null);
-  const [amountUsd, setAmountUsd] = useState("");
-  const [capitalPct, setCapitalPct] = useState("");
+  const [riskChoice, setRiskChoice] = useState<(typeof RISK_OPTIONS)[number]>("1");
+  const [customRiskPct, setCustomRiskPct] = useState("");
   const [, setLocation] = useLocation();
   const { trades, addTrade } = useTrades();
   const { addToWatchlist } = useWatchlist();
@@ -178,38 +179,24 @@ export default function TradeEntry() {
     setForm(DEFAULTS);
     setCustomSetup("");
     setResult(null);
-    setAmountUsd("");
-    setCapitalPct("");
+    setRiskChoice("1");
+    setCustomRiskPct("");
     setView("form");
   };
 
-  const parsedAmountUsd = parseFloat(amountUsd);
-  const parsedCapitalPct = parseFloat(capitalPct);
-  const allocatedAmountUsd = Number.isFinite(parsedAmountUsd) && parsedAmountUsd > 0 ? parsedAmountUsd : undefined;
-
-  const handleAmountUsdChange = (raw: string) => {
-    setAmountUsd(raw);
-    const n = parseFloat(raw);
-    if (!raw.trim()) {
-      setCapitalPct("");
-      return;
-    }
-    if (liveCapital > 0 && Number.isFinite(n)) {
-      setCapitalPct(((n / liveCapital) * 100).toFixed(2));
-    }
-  };
-
-  const handleCapitalPctChange = (raw: string) => {
-    setCapitalPct(raw);
-    const n = parseFloat(raw);
-    if (!raw.trim()) {
-      setAmountUsd("");
-      return;
-    }
-    if (liveCapital > 0 && Number.isFinite(n)) {
-      setAmountUsd(((n / 100) * liveCapital).toFixed(2));
-    }
-  };
+  const selectedRiskPct = riskChoice === "Other" ? parseFloat(customRiskPct) : parseFloat(riskChoice);
+  const riskPerTradePct = Number.isFinite(selectedRiskPct) && selectedRiskPct > 0 ? selectedRiskPct : undefined;
+  const riskAmountUsd = riskPerTradePct == null || liveCapital <= 0 ? undefined : (liveCapital * riskPerTradePct) / 100;
+  const formulaPositionSizeUsd = riskAmountUsd == null || form.stopLossPct <= 0
+    ? undefined
+    : riskAmountUsd / (form.stopLossPct / 100);
+  const allocatedAmountUsd = formulaPositionSizeUsd == null
+    ? undefined
+    : Math.min(formulaPositionSizeUsd, liveCapital);
+  const positionSizeWasCapped = formulaPositionSizeUsd != null && allocatedAmountUsd != null && formulaPositionSizeUsd > allocatedAmountUsd;
+  const allocatedCapitalPct = allocatedAmountUsd != null && liveCapital > 0
+    ? (allocatedAmountUsd / liveCapital) * 100
+    : undefined;
 
   const tradePayload = () => ({
     ...form,
@@ -217,9 +204,17 @@ export default function TradeEntry() {
     scoreBreakdown: {
       ...result!.scoreBreakdown,
       accountCapitalAtEntryUsd: liveCapital,
-      ...(Number.isFinite(parsedCapitalPct) ? { allocatedCapitalPct: parsedCapitalPct } : {}),
+      ...(riskPerTradePct != null ? { riskPerTradePct } : {}),
+      ...(riskAmountUsd != null ? { riskAmountUsd } : {}),
+      ...(allocatedCapitalPct != null ? { allocatedCapitalPct } : {}),
+      ...(formulaPositionSizeUsd != null ? { formulaPositionSizeUsd } : {}),
+      ...(positionSizeWasCapped ? { positionSizeCappedAtCapital: true } : {}),
     },
     allocatedAmountUsd,
+    riskPerTradePct,
+    riskAmountUsd,
+    calculatedPositionSizeUsd: allocatedAmountUsd,
+    allocatedCapitalPct,
     id: `t-${Date.now()}`,
     createdAt: new Date().toISOString(),
   });
@@ -237,7 +232,19 @@ export default function TradeEntry() {
     await addToWatchlist({
       ...form,
       ...result,
-      scoreBreakdown: { ...result.scoreBreakdown, accountCapitalAtEntryUsd: liveCapital },
+      scoreBreakdown: {
+        ...result.scoreBreakdown,
+        accountCapitalAtEntryUsd: liveCapital,
+        ...(riskPerTradePct != null ? { riskPerTradePct } : {}),
+        ...(riskAmountUsd != null ? { riskAmountUsd } : {}),
+        ...(allocatedCapitalPct != null ? { allocatedCapitalPct } : {}),
+        ...(formulaPositionSizeUsd != null ? { formulaPositionSizeUsd } : {}),
+        ...(positionSizeWasCapped ? { positionSizeCappedAtCapital: true } : {}),
+      },
+      riskPerTradePct,
+      riskAmountUsd,
+      calculatedPositionSizeUsd: allocatedAmountUsd,
+      allocatedCapitalPct,
       id: `w-${Date.now()}`,
       createdAt,
     });
@@ -271,7 +278,7 @@ export default function TradeEntry() {
 
         <section className="border border-border rounded-sm p-4 space-y-4">
           <div className="section-label">Historical Matches</div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
             <Stat label="Similar Trades Found" value={String(s.similarTradesFound)} />
             <Stat label="Average Similarity" value={pct(s.averageSimilarityPct)} />
           </div>
@@ -279,7 +286,7 @@ export default function TradeEntry() {
 
         <section className="border border-border rounded-sm p-4 space-y-4">
           <div className="section-label">Similarity Breakdown</div>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-6 gap-y-4">
             <Stat label="Near Matches" value={String(s.nearMatches)} />
             <Stat label="Strong Matches" value={String(s.strongMatches)} />
             <Stat label="Loose Matches" value={String(s.looseMatches)} />
@@ -288,7 +295,7 @@ export default function TradeEntry() {
 
         <section className="border border-border rounded-sm p-4 space-y-4">
           <div className="section-label">Historical Performance</div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-4">
             <Stat label="Historical Win Rate" value={pct(s.historicalWinRate)} />
             <Stat label="Historical Breakeven Rate" value={pct(s.historicalBreakevenRate)} />
             <Stat label="Historical Loss Rate" value={pct(s.historicalLossRate)} />
@@ -300,7 +307,7 @@ export default function TradeEntry() {
 
         <section className="border border-border rounded-sm p-4 space-y-4">
           <div className="section-label">Expected Outcome</div>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-6 gap-y-4">
             <Stat label="Expected Return" value={pct(s.expectedReturnPct, true)} color={tone(s.expectedReturnPct)} />
             <Stat label="Weighted Historical Win Rate" value={pct(s.weightedHistoricalWinRate)} />
             <Stat label="Confidence Level" value={s.confidenceLevel} />
@@ -311,34 +318,61 @@ export default function TradeEntry() {
           <div className="section-label">Position Size</div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <Label text="Amount (USD)" />
-              <input
-                type="number"
-                step="0.01"
-                min="0"
-                className="w-full bg-background border border-border rounded-sm px-3 py-2.5 text-sm font-mono text-foreground focus:outline-none focus:border-ring"
-                placeholder={`e.g. ${(liveCapital * 0.1).toFixed(0)}`}
-                value={amountUsd}
-                onChange={(e) => handleAmountUsdChange(e.target.value)}
-              />
+              <Label text="Risk per Trade" />
+              <select
+                className="form-select w-full bg-background border border-border rounded-sm px-3 py-2.5 text-sm font-mono text-foreground focus:outline-none focus:border-ring cursor-pointer"
+                value={riskChoice}
+                onChange={(e) => setRiskChoice(e.target.value as (typeof RISK_OPTIONS)[number])}
+              >
+                <option value="1">1%</option>
+                <option value="2">2%</option>
+                <option value="3">3%</option>
+                <option value="Other">Other</option>
+              </select>
             </div>
-            <div>
-              <Label text="Capital %" />
-              <input
-                type="number"
-                step="0.01"
-                min="0"
-                max="100"
-                className="w-full bg-background border border-border rounded-sm px-3 py-2.5 text-sm font-mono text-foreground focus:outline-none focus:border-ring"
-                placeholder="e.g. 10"
-                value={capitalPct}
-                onChange={(e) => handleCapitalPctChange(e.target.value)}
-              />
-              <p className="text-[10px] text-muted-foreground mt-1.5 font-mono">
-                Based on ${liveCapital.toLocaleString(undefined, { maximumFractionDigits: 0 })} live capital
-              </p>
-            </div>
+            {riskChoice === "Other" && (
+              <div>
+                <Label text="Manual Risk %" />
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  className="w-full bg-background border border-border rounded-sm px-3 py-2.5 text-sm font-mono text-foreground focus:outline-none focus:border-ring"
+                  placeholder="e.g. 1.5"
+                  value={customRiskPct}
+                  onChange={(e) => setCustomRiskPct(e.target.value)}
+                />
+              </div>
+            )}
           </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-4 pt-1">
+            <Stat label="Current Net Capital" value={`$${liveCapital.toLocaleString(undefined, { maximumFractionDigits: 0 })}`} />
+            <Stat label="Risk $" value={riskAmountUsd == null ? "-" : `$${riskAmountUsd.toFixed(2)}`} />
+            <Stat label="SL %" value={pct(form.stopLossPct)} />
+            <Stat
+              label="Calculated Position"
+              value={
+                allocatedAmountUsd == null ? "-" : (
+                  <span>
+                    ${allocatedAmountUsd.toFixed(2)}
+                    {allocatedCapitalPct != null && (
+                      <span className="ml-2 text-xs font-normal text-muted-foreground">
+                        {allocatedCapitalPct.toFixed(2)}%
+                      </span>
+                    )}
+                    {positionSizeWasCapped && (
+                      <span className="ml-2 text-[10px] font-normal text-yellow-500/80">
+                        capped
+                      </span>
+                    )}
+                  </span>
+                )
+              }
+            />
+          </div>
+          {riskChoice === "Other" && riskPerTradePct == null && (
+            <div className="text-xs text-red-400 font-mono">Enter a positive manual risk percentage before logging.</div>
+          )}
         </section>
 
         <div className="flex gap-2 w-full pt-1">
@@ -347,6 +381,7 @@ export default function TradeEntry() {
             style={{ flex: "70 70 0%" }}
             className="py-3.5 text-sm font-semibold font-mono rounded-sm bg-emerald-600/80 text-white hover:bg-emerald-600 transition-colors"
             onClick={saveJournal}
+            disabled={riskPerTradePct == null}
           >
             Log Trade
           </button>
@@ -357,6 +392,7 @@ export default function TradeEntry() {
             style={{ flex: "5 5 0%" }}
             className="py-3.5 flex items-center justify-center border border-border rounded-sm text-muted-foreground hover:text-foreground hover:border-ring transition-colors min-w-12"
             onClick={saveWatchlist}
+            disabled={riskPerTradePct == null}
           >
             <Tag size={18} strokeWidth={1.75} />
           </button>

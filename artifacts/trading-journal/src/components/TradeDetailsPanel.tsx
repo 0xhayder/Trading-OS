@@ -22,17 +22,32 @@ function pct(value: number | null | undefined, signed = false) {
   return `${prefix}${value.toFixed(2)}%`;
 }
 
+function rawNumber(value: number | null | undefined) {
+  if (value == null) return "-";
+  return Number.isInteger(value) ? String(value) : value.toFixed(2);
+}
+
 function usd(value: number | null | undefined) {
   if (value == null) return "-";
   const prefix = value > 0 ? "+" : value < 0 ? "-" : "";
   return `${prefix}$${Math.abs(value).toFixed(2)}`;
 }
 
-function Field({ label, value }: { label: string; value: string }) {
+function Field({
+  label,
+  value,
+  className = "",
+  wrap = false,
+}: {
+  label: string;
+  value: string;
+  className?: string;
+  wrap?: boolean;
+}) {
   return (
-    <div className="border border-border rounded-sm px-3 py-2 min-w-0">
+    <div className={`border border-border rounded-sm px-3 py-2 min-w-0 ${className}`}>
       <div className="section-label mb-1">{label}</div>
-      <div className="text-xs font-mono text-foreground font-semibold truncate">{value}</div>
+      <div className={`text-xs font-mono text-foreground font-semibold ${wrap ? "whitespace-normal break-words" : "truncate"}`}>{value}</div>
     </div>
   );
 }
@@ -82,9 +97,13 @@ export default function TradeDetailsPanel({ trade, kind = "journal" }: { trade: 
       {/* Trade Plan */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         <Field label="SL" value={pct(trade.stopLossPct)} />
-        <Field label="TP1" value={`${pct(trade.tp1Pct)} / ${pct(trade.tp1PositionPct)}`} />
-        <Field label="TP2" value={`${pct(trade.tp2Pct)} / ${pct(trade.tp2PositionPct)}`} />
-        <Field label="TP3" value={`${pct(trade.tp3Pct)} / ${pct(trade.tp3PositionPct)}`} />
+        <Field
+          label="TP"
+          value={`${rawNumber(trade.tp1Pct)} / ${rawNumber(trade.tp2Pct)} / ${rawNumber(trade.tp3Pct)}`}
+          wrap
+        />
+        <Field label="PnL $" value={usd(t.realizedPnlUsd)} />
+        <Field label="Allocation" value={t.allocatedAmountUsd == null ? "-" : `$${t.allocatedAmountUsd.toFixed(2)}`} />
         <Field label="RR" value={trade.suggestedRr ? `${trade.suggestedRr.toFixed(2)}R` : "-"} />
       </div>
 
@@ -92,9 +111,7 @@ export default function TradeDetailsPanel({ trade, kind = "journal" }: { trade: 
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         <Field label="Result" value={outcome} />
         <Field label="PnL %" value={pct(t.actualPnlPct, true)} />
-        <Field label="PnL $" value={usd(t.realizedPnlUsd)} />
-        <Field label="Mistake Tags" value={tags.length ? tags.join(", ") : "None tagged"} />
-        <Field label="Allocation" value={t.allocatedAmountUsd == null ? "-" : `$${t.allocatedAmountUsd.toFixed(2)}`} />
+        <Field label="Mistakes (tagged)" value={tags.length ? tags.join(", ") : "None tagged"} className="md:col-span-3" wrap />
       </div>
 
       {/* Notes */}

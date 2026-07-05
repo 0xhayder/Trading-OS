@@ -133,6 +133,10 @@ export interface ScoreResult {
   presentation?: unknown;
   /** Raw persisted engine diagnostics for details after reload. */
   scoreBreakdown?: Record<string, unknown>;
+  riskPerTradePct?: number;
+  riskAmountUsd?: number;
+  calculatedPositionSizeUsd?: number;
+  allocatedCapitalPct?: number;
 }
 
 export interface HistoricalSnapshot {

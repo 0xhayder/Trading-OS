@@ -49,6 +49,20 @@ function accountCapitalAtEntry(trade: Trade, fallback: number): number {
   return Number.isFinite(capital) && capital > 0 ? capital : fallback;
 }
 
+function riskPctAtEntry(trade: Trade, fallbackCapital: number): number {
+  if (trade.riskPerTradePct != null && trade.riskPerTradePct > 0) return trade.riskPerTradePct;
+
+  const breakdown = typeof trade.scoreBreakdown === "object" && trade.scoreBreakdown != null
+    ? trade.scoreBreakdown
+    : undefined;
+  const storedRiskPct = Number(breakdown?.riskPerTradePct);
+  if (Number.isFinite(storedRiskPct) && storedRiskPct > 0) return storedRiskPct;
+
+  const denominator = accountCapitalAtEntry(trade, fallbackCapital);
+  if (trade.allocatedAmountUsd == null || denominator <= 0 || trade.stopLossPct <= 0) return 0;
+  return ((trade.allocatedAmountUsd * trade.stopLossPct) / 100 / denominator) * 100;
+}
+
 function fmtPct(value: number, signed = false) {
   const prefix = signed && value > 0 ? "+" : "";
   return `${prefix}${value.toFixed(2)}%`;
@@ -205,6 +219,11 @@ export default function Analytics() {
       })
       .filter((value) => value > 0),
   );
+  const avgRiskPerTradePct = avg(
+    closed
+      .map((trade) => riskPctAtEntry(trade, settings.totalCapital))
+      .filter((value) => value > 0),
+  );
   const expectancyPct = decided > 0
     ? (wins.length / decided) * avgWinPct - (losses.length / decided) * avgLossPct
     : 0;
@@ -298,7 +317,7 @@ export default function Analytics() {
             <MetricRow label="Average loss" value={`-${avgLossPct.toFixed(2)}%`} color="text-red-400" />
             <MetricRow label="Average RR" value={avgRr > 0 ? `${avgRr.toFixed(2)}:1` : "-"} />
             <MetricRow label="Average position size" value={`${avgCapitalRiskPct.toFixed(2)}%`} />
-            <MetricRow label="Closed sample" value={`${closed.length} trades`} />
+            <MetricRow label="Average risk per trade" value={`${avgRiskPerTradePct.toFixed(2)}%`} />
           </div>
         </Panel>
       </div>

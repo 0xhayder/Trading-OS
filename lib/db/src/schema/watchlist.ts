@@ -1,4 +1,4 @@
-import { pgTable, real, serial, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { jsonb, pgTable, real, serial, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -36,6 +36,11 @@ export const watchlistTable = pgTable("watchlist", {
   suggestedRr: real("suggested_rr").notNull().default(0),
   tradeWarnings: text("trade_warnings").notNull().default(""),
   finalDecision: text("final_decision").notNull().default(""),
+  scoreBreakdown: jsonb("score_breakdown").$type<Record<string, unknown>>(),
+  riskPerTradePct: real("risk_per_trade_pct"),
+  riskAmountUsd: real("risk_amount_usd"),
+  calculatedPositionSizeUsd: real("calculated_position_size_usd"),
+  allocatedCapitalPct: real("allocated_capital_pct"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

@@ -9,6 +9,11 @@ function toFiniteNumber(value: unknown): number | undefined {
   return Number.isFinite(num) ? num : undefined;
 }
 
+function numberFromBreakdown(value: unknown, key: string): number | undefined {
+  if (typeof value !== "object" || value == null || Array.isArray(value)) return undefined;
+  return toFiniteNumber((value as Record<string, unknown>)[key]);
+}
+
 function signedPnlPct(outcome: unknown, pnlPct: unknown): number | null {
   if (outcome === "breakeven") return 0;
   const magnitude = Math.abs(Number(pnlPct));
@@ -88,6 +93,9 @@ function legacyRowToTokenStructure(row: JsonRow): {
 
 function toTrade(row: JsonRow) {
   const token = legacyRowToTokenStructure(row);
+  const scoreBreakdown = typeof row.score_breakdown === "object" && row.score_breakdown != null
+    ? row.score_breakdown
+    : undefined;
   const btcStored = row.btc_higher_tf_structure ?? row.btc_condition;
   const altStored = row.alt_market_higher_tf ?? row.alt_condition;
   const btcTrend = isMarketTrend(btcStored)
@@ -153,9 +161,11 @@ function toTrade(row: JsonRow) {
     suggestedRr: Number(row.suggested_rr ?? 0),
     warnings: splitWarnings(row.trade_warnings),
     finalDecision: String(row.final_decision ?? ""),
-    scoreBreakdown: typeof row.score_breakdown === "object" && row.score_breakdown != null
-      ? row.score_breakdown
-      : undefined,
+    scoreBreakdown,
+    riskPerTradePct: toFiniteNumber(row.risk_per_trade_pct) ?? numberFromBreakdown(scoreBreakdown, "riskPerTradePct"),
+    riskAmountUsd: toFiniteNumber(row.risk_amount_usd) ?? numberFromBreakdown(scoreBreakdown, "riskAmountUsd"),
+    calculatedPositionSizeUsd: toFiniteNumber(row.calculated_position_size_usd) ?? toFiniteNumber(row.allocated_amount_usd),
+    allocatedCapitalPct: toFiniteNumber(row.allocated_capital_pct) ?? numberFromBreakdown(scoreBreakdown, "allocatedCapitalPct"),
     createdAt: String(row.created_at ?? new Date().toISOString()),
     closedAt: typeof row.closed_at === "string" ? row.closed_at : undefined,
     allocatedAmountUsd: row.allocated_amount_usd == null ? undefined : Number(row.allocated_amount_usd),
@@ -248,6 +258,10 @@ function toTradeInsert(trade: JsonRow) {
       ...(typeof trade.presentation === "object" && trade.presentation != null ? { presentation: trade.presentation } : {}),
       scoredAt: trade.scoredAt ?? null,
     },
+    risk_per_trade_pct: toFiniteNumber(trade.riskPerTradePct) ?? null,
+    risk_amount_usd: toFiniteNumber(trade.riskAmountUsd) ?? null,
+    calculated_position_size_usd: toFiniteNumber(trade.calculatedPositionSizeUsd) ?? toFiniteNumber(trade.allocatedAmountUsd) ?? null,
+    allocated_capital_pct: toFiniteNumber(trade.allocatedCapitalPct) ?? null,
     created_at: trade.createdAt ?? new Date().toISOString(),
     allocated_amount_usd: toFiniteNumber(trade.allocatedAmountUsd) ?? null,
     realized_pnl_usd: calculateRealizedPnlUsd(toFiniteNumber(trade.allocatedAmountUsd), actualPnlPct),
@@ -294,8 +308,8 @@ function toWatchlistInsert(item: JsonRow) {
     expected_profit_pct: _expectedProfitPct,
     expected_loss_pct: _expectedLossPct,
     closed_at: _closedAt,
+    allocated_amount_usd: _allocatedAmountUsd,
     realized_pnl_usd: _realizedPnlUsd,
-    score_breakdown: _scoreBreakdown,
     ...row
   } = toTradeInsert(item);
 
