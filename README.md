@@ -2,6 +2,8 @@
 
 A personal trading journal and analytics dashboard built to track trading performance, risk, and activity.
 
+![Trading OS](./preview.png)
+
 ## Features
 
 * Trade journaling
