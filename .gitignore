@@ -57,3 +57,24 @@ Thumbs.db
 # Ephemeral caches (e.g. some cloud IDEs / local tooling)
 .cache/
 .local/
+
+# AI assistant and generated-workspace clutter
+.ai/
+.cursor/
+.windsurf/
+claude/
+gemini/
+chatgpt/
+v0/
+lovable/
+bolt/
+artifacts/
+screenshots/
+*_generated/
+*_old/
+*_backup/
+temp/
+new/
+new2/
+final/
+final2/

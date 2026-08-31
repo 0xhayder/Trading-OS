@@ -1,0 +1,4 @@
+/* Scan the journal source so Tailwind generates its utilities. */
+@source "../../journal/src/**/*.{js,ts,jsx,tsx}";
+
+@import "../../journal/src/index.css";

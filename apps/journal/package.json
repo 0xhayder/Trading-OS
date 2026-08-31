@@ -1,0 +1,16 @@
+{
+  "name": "@workspace/journal",
+  "version": "0.0.0",
+  "private": true,
+  "dependencies": {
+    "clsx": "catalog:",
+    "lucide-react": "catalog:",
+    "react": "catalog:",
+    "recharts": "^2.15.2",
+    "tailwind-merge": "catalog:",
+    "wouter": "^3.3.5"
+  },
+  "devDependencies": {
+    "@types/react": "catalog:"
+  }
+}
